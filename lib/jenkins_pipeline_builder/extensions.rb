@@ -47,6 +47,32 @@ JenkinsPipelineBuilder.registry.entries.each do |type, path|
   end
 end
 
+def scm_type(&block)
+  JenkinsPipelineBuilder.registry.registry[:job][:scm] ||= {}
+
+  set = JenkinsPipelineBuilder::ExtensionSet.new
+  set.instance_eval(&block)
+  set.blocks.each do |version, settings|
+    ext = JenkinsPipelineBuilder::Extension.new
+    ext.min_version version
+    ext.type :scm
+    set.settings.merge(settings).each do |key, value|
+      ext.send key, value
+    end
+    ext.path '//project'
+    set.extensions << ext
+  end
+  unless set.valid?
+    name = set.name || 'A plugin with no name provided'
+    puts "Encountered errors while registering #{name}"
+    puts set.errors.map { |k, v| "#{k}: #{v}" }.join(', ')
+    return false
+  end
+  JenkinsPipelineBuilder.registry.register([:job, :scm], set)
+  versions = set.extensions.map(&:min_version)
+  puts "Successfully registered #{set.name} for versions #{versions}" if set.announced
+end
+
 def job_attribute(&block)
   set = JenkinsPipelineBuilder::ExtensionSet.new
   set.instance_eval(&block)

@@ -83,6 +83,7 @@ module JenkinsPipelineBuilder
     end
 
     def traverse_registry(registry, params, n_xml, strict = false)
+      puts params.inspect
       params.each do |key, value|
         next unless registry.is_a? Hash
         unless registry.key? key
@@ -90,6 +91,10 @@ module JenkinsPipelineBuilder
           next
         end
         reg_value = registry[key]
+        if key == :scm
+          provider = value.delete(:provider)
+          reg_value = reg_value[provider]
+        end
         if reg_value.is_a? ExtensionSet
           ext = reg_value.extension
           logger.debug "Using #{ext.type} #{ext.name} version #{ext.min_version}"
