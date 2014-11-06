@@ -83,7 +83,6 @@ module JenkinsPipelineBuilder
     end
 
     def traverse_registry(registry, params, n_xml, strict = false)
-      puts params.inspect
       params.each do |key, value|
         next unless registry.is_a? Hash
         unless registry.key? key

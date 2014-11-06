@@ -69,8 +69,8 @@ describe JenkinsPipelineBuilder::ModuleRegistry do
         promoted_builds: ['0']
       }
       registry = JenkinsPipelineBuilder.registry.registry
-      # There are 4 sub types so, we don't count those
-      expect(registry[:job].size - 4).to eq job_attributes.size
+      # There are 5 sub types so, we don't count those
+      expect(registry[:job].size - 5).to eq job_attributes.size
       job_attributes.each do |job_attribute, versions|
         expect(registry[:job]).to have_key job_attribute
 

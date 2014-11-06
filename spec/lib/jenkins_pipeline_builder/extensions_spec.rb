@@ -173,6 +173,12 @@ describe JenkinsPipelineBuilder::ExtensionSet do
       expect(set.extensions.size).to eq versions.size
     end
 
+    it 'correctly compares a major.minor with a major.minor.patch' do
+      ext_versions ['2.0', '0']
+      set.installed_version = '1.1.8'
+      expect(set.extension.min_version).to eq '0'
+    end
+
     it 'returns an extension' do
       ext_versions ['0.0']
       set.installed_version = '0.1'
