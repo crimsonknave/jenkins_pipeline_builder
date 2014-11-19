@@ -128,7 +128,7 @@ describe JenkinsPipelineBuilder::Extension do
 end
 
 describe JenkinsPipelineBuilder::ExtensionSet do
-  subject(:set) { JenkinsPipelineBuilder::ExtensionSet.new }
+  subject(:set) { JenkinsPipelineBuilder::ExtensionSet.new('foo') {} }
 
   before :each do
     set.name 'example'
