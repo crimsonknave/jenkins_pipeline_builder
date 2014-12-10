@@ -92,16 +92,7 @@ module JenkinsPipelineBuilder
       logger.info "Project: #{projects}"
       projects.each do |project|
         next unless project[:name] == project_name || project_name.nil?
-        logger.info "Using Project #{project}"
-        pull_job = find_pull_request_generator(project)
-        p_success, p_payload = compile_pull_request_generator(pull_job[:name], project)
-        next unless p_success
-        jobs = filter_pull_request_jobs(pull_job)
-        pull = JenkinsPipelineBuilder::PullRequestGenerator.new(project, jobs, p_payload)
-        @job_collection.merge! pull.jobs
-        success = create_pull_request_jobs(pull)
-        failed = success unless success
-        purge_pull_request_jobs(pull)
+        failed = true unless generate_pull_request_jobs project
       end
       !failed
     end
@@ -124,6 +115,23 @@ module JenkinsPipelineBuilder
     #
 
     private
+
+    def prepare_pull_request(project)
+      logger.info "Using Project #{project}"
+      pull_job = find_pull_request_generator(project)
+      success, payload = compile_pull_request_generator(pull_job[:name], project)
+      return false unless success
+      jobs = filter_pull_request_jobs(pull_job)
+      JenkinsPipelineBuilder::PullRequestGenerator.new(project, jobs, payload)
+    end
+
+    def generate_pull_request_jobs(project)
+      pull = prepare_pull_request project
+      @job_collection.merge! pull.jobs
+      success = create_pull_request_jobs(pull)
+      return false unless success
+      purge_pull_request_jobs(pull)
+    end
 
     def purge_pull_request_jobs(pull)
       pull.purge.each do |purge_job|
@@ -164,7 +172,7 @@ module JenkinsPipelineBuilder
       pull_jobs = pull_job[:value][:jobs] || []
       pull_jobs.each do |job|
         if job.is_a? String
-          jobs[job.to_s] = @job_collection[job.to_s]
+          jobs[job] = @job_collection[job]
         else
           jobs[job.keys.first.to_s] = @job_collection[job.keys.first.to_s]
         end

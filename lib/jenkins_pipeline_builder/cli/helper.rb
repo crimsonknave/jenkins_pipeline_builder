@@ -40,32 +40,44 @@ module JenkinsPipelineBuilder
       # @return [JenkinsPipelineBuilder::Generator] A new Client object
       #
       def self.setup(options)
-        if options[:username] && options[:server_ip] && \
-          (options[:password] || options[:password_base64])
-          creds = options
-        elsif options[:creds_file]
-          if options[:creds_file].end_with? 'json'
-            creds = JSON.parse(IO.read(File.expand_path(options[:creds_file])))
-          else
-            creds = YAML.load_file(File.expand_path(options[:creds_file]))
-          end
-        elsif File.exist?("#{ENV['HOME']}/.jenkins_api_client/login.yml")
-          creds = YAML.load_file(
-            File.expand_path("#{ENV['HOME']}/.jenkins_api_client/login.yml", __FILE__)
-          )
-        elsif options[:debug]
-          creds = { username: :foo, password: :bar, server_ip: :baz }
-        else
-          msg = 'Credentials are not set. Please pass them as parameters or'
-          msg << ' set them in the default credentials file'
-          puts msg
-          exit 1
-        end
+        creds = find_creds
 
         JenkinsPipelineBuilder.credentials = creds
         generator = JenkinsPipelineBuilder.generator
         generator.debug = options[:debug]
         generator
+      end
+
+      def self.load_creds_file
+        return JSON.parse(IO.read(File.expand_path(options[:creds_file]))) if options[:creds_file].end_with? 'json'
+        YAML.load_file(File.expand_path(options[:creds_file]))
+      end
+
+      def self.find_creds
+        if creds_in_options?
+          options
+        elsif options[:creds_file]
+          load_creds_file
+        elsif File.exist?("#{ENV['HOME']}/.jenkins_api_client/login.yml")
+          YAML.load_file(
+            File.expand_path("#{ENV['HOME']}/.jenkins_api_client/login.yml", __FILE__)
+          )
+        elsif options[:debug]
+          { username: :foo, password: :bar, server_ip: :baz }
+        else
+          exit_due_to_no_creds
+        end
+      end
+
+      def self.exit_due_to_no_creds
+        msg = 'Credentials are not set. Please pass them as parameters or'
+        msg << ' set them in the default credentials file'
+        puts msg
+        exit 1
+      end
+
+      def self.creds_in_options?
+        options[:username] && options[:server_ip] && (options[:password] || options[:password_base64])
       end
     end
   end
