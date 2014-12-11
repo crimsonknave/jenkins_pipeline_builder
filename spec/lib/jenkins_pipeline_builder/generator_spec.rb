@@ -92,6 +92,19 @@ describe JenkinsPipelineBuilder::Generator do
         File.delete(file)
       end
     end
+
+    it 'loads extensions in remote dependencies' do
+      @generator.debug = true
+      job_name = 'TemplatePipeline'
+      path = File.expand_path('../fixtures/generator_tests/template_pipeline', __FILE__)
+      errors = @generator.bootstrap(path, job_name)
+      expect(errors.empty?).to be true
+      expect(@generator.module_registry.registry[:job][:wrappers].keys).to include :test_wrapper
+      Dir["#{job_name}*.xml"].each do |file|
+        File.delete(file)
+      end
+      @generator.module_registry.registry[:job][:wrappers].delete(:test_wrapper)
+    end
     # Things to check for:
     # Fail - Finds duplicate job names (load_job_collection)
     # Extension fails to register?
@@ -152,6 +165,37 @@ describe JenkinsPipelineBuilder::Generator do
     # Fails to purge old PR jobs from Jenkins
   end
 
+  describe '#load_collection_from_path' do
+    let(:project_hash) do
+      [{ 'defaults' => { 'name' => 'global', 'description' => 'Tests, all the tests' } },
+       { 'project' => { 'name' => 'TestProject', 'jobs' => ['{{name}}-part1'] } }]
+    end
+    let(:view_hash) do
+      [{ 'view' =>
+        { 'name' => '{{name}} View', 'type' => 'listview', 'description' => '{{description}}', 'regex' => '{{name}}.*' }
+      }]
+    end
+
+    it 'loads a yaml collection from a path' do
+      path = File.expand_path('../fixtures/generator_tests/test_yaml_files', __FILE__)
+      expect(@generator).to receive(:load_job_collection).once.with(view_hash, false).and_return(true)
+      expect(@generator).to receive(:load_job_collection).once.with(project_hash, false).and_return(true)
+      @generator.send(:load_collection_from_path, path)
+    end
+    it 'loads a json collection from a path' do
+      path = File.expand_path('../fixtures/generator_tests/test_json_files', __FILE__)
+      expect(@generator).to receive(:load_job_collection).once.with(view_hash, false).and_return(true)
+      expect(@generator).to receive(:load_job_collection).once.with(project_hash, false).and_return(true)
+      @generator.send(:load_collection_from_path, path)
+    end
+    it 'loads both yaml and json files from a path' do
+      path = File.expand_path('../fixtures/generator_tests/test_combo_files', __FILE__)
+      expect(@generator).to receive(:load_job_collection).once.with(view_hash, false).and_return(true)
+      expect(@generator).to receive(:load_job_collection).once.with(project_hash, false).and_return(true)
+      @generator.send(:load_collection_from_path, path)
+    end
+  end
+
   describe '#dump' do
     it "writes a job's config XML to a file" do
       @generator.debug = true
@@ -168,6 +212,21 @@ describe JenkinsPipelineBuilder::Generator do
       @generator.dump(job_name)
       expect(File.exist?("#{job_name}.xml")).to be true
       File.delete("#{job_name}.xml")
+    end
+  end
+
+  describe '#file_mode' do
+    before :each do
+      allow(JenkinsPipelineBuilder.client).to receive(:plugin).and_return double(
+        list_installed: { 'description' => '20.0', 'git' => '20.0' })
+    end
+    it 'generates xml and saves to disk without sending jobs to the server' do
+      job_name = 'TemplatePipeline'
+      path = File.expand_path('../fixtures/generator_tests/template_pipeline', __FILE__)
+      errors = @generator.file(path, job_name)
+      expect(errors).to be_empty
+      expect(File.exist?("out/xml/#{job_name}-10.xml")).to be true
+      expect(File.exist?("out/xml/#{job_name}-11.xml")).to be true
     end
   end
 end

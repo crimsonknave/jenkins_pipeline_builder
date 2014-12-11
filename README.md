@@ -1,6 +1,8 @@
 jenkins-pipeline-builder
 ========================
 
+[![Build Status](https://travis-ci.org/constantcontact/jenkins_pipeline_builder.svg)](https://travis-ci.org/constantcontact/jenkins_pipeline_builder)  [![Gem Version](https://badge.fury.io/rb/jenkins_pipeline_builder.svg)](http://badge.fury.io/rb/jenkins_pipeline_builder)
+
 YAML driven CI Jenkins Pipeline Builder enabling to version your artifact pipelines alongside with the artifact source
 itself.
 
@@ -21,6 +23,8 @@ USAGE:
 ------
 
 ### Installation
+
+Ruby 2.0 or higher is required.
 
 Add this line to your application's Gemfile:
 
@@ -76,6 +80,9 @@ NOTE: you can run the pipeline in NOOP (debug-only) mode by addind -d parameter,
     generate pipeline -d -c config/login.yml bootstrap ./pipeline
 
 The command comes with fairly extensive help. For example you can list all of the registered extension types with `generate list` and a list of all extensions of a type with `generate list type`
+
+#### JSON now supported
+The pipeline builder now suppots json for config and pipeline files instead of or in addition to yaml files
 
 DSL:
 ----
@@ -287,7 +294,7 @@ You need to manually create your promotion rules. Using this plugin will help yo
 The pull request generator will generate pipelines for pull requests that are noticed on your repo. It will also remove old pipelines from Jenkins if the pull_request is closed.
 If you need to modify job parameters please just specify that in the jobs section like the example below.
 
-When running a project through this module, the project {{name}} is appended with "-PR##" where ## is the number of the pull request.
+When running a project through this module, the project {{name}} is appended with "-PR##" where ## is the number of the pull request.  You can also use {{pull_request_number}} to get just the number of the PR.
 
 ```yaml
 - job:

@@ -21,6 +21,7 @@
 #
 
 require 'yaml'
+require 'json'
 
 module JenkinsPipelineBuilder
   class Generator
@@ -70,14 +71,12 @@ module JenkinsPipelineBuilder
       logger.info "Bootstrapping pipeline from path #{path}"
       load_collection_from_path(path)
       cleanup_temp_remote
-      load_extensions(path)
       errors = {}
       if projects.any?
         errors = publish_project(project_name)
       else
         errors = publish_jobs(jobs)
       end
-      return false if errors == false
       errors.each do |k, v|
         logger.error "Encountered errors compiling: #{k}:"
         logger.error v
@@ -86,11 +85,10 @@ module JenkinsPipelineBuilder
     end
 
     def pull_request(path, project_name)
-      success = false
+      failed = false
       logger.info "Pull Request Generator Running from path #{path}"
       load_collection_from_path(path)
       cleanup_temp_remote
-      load_extensions(path)
       logger.info "Project: #{projects}"
       projects.each do |project|
         next unless project[:name] == project_name || project_name.nil?
@@ -100,12 +98,18 @@ module JenkinsPipelineBuilder
         next unless p_success
         jobs = filter_pull_request_jobs(pull_job)
         pull = JenkinsPipelineBuilder::PullRequestGenerator.new(project, jobs, p_payload)
-
         @job_collection.merge! pull.jobs
         success = create_pull_request_jobs(pull)
+        failed = success unless success
         purge_pull_request_jobs(pull)
       end
-      success
+      !failed
+    end
+
+    def file(path, project_name)
+      logger.info "Generating files from path #{path}"
+      @file_mode = true
+      bootstrap(path, project_name)
     end
 
     def dump(job_name)
@@ -151,7 +155,7 @@ module JenkinsPipelineBuilder
         job = @job_collection[job.to_s]
         pull_job = job if job[:value][:job_type] == 'pull_request_generator'
       end
-      fail 'No Pull Request Found for Project' unless pull_job
+      fail 'No Pull Request Job Found for Project' unless pull_job
       pull_job
     end
 
@@ -177,18 +181,28 @@ module JenkinsPipelineBuilder
     end
 
     def load_collection_from_path(path, remote = false)
+      load_extensions(path)
       path = File.expand_path(path, Dir.getwd)
       if File.directory?(path)
         logger.info "Generating from folder #{path}"
-        Dir[File.join(path, '/*.yaml'), File.join(path, '/*.yml')].each do |file|
+        Dir[File.join(path, '/*.{yaml,yml}')].each do |file|
           logger.info "Loading file #{file}"
           yaml = YAML.load_file(file)
           load_job_collection(yaml, remote)
         end
+        Dir[File.join(path, '/*.json')].each do |file|
+          logger.info "Loading file #{file}"
+          json = JSON.parse(IO.read(file))
+          load_job_collection(json, remote)
+        end
       else
         logger.info "Loading file #{path}"
-        yaml = YAML.load_file(path)
-        load_job_collection(yaml, remote)
+        if path.end_with? 'json'
+          hash = JSON.parse(IO.read(path))
+        else  # elsif path.end_with?("yml") || path.end_with?("yaml")
+          hash = YAML.load_file(path)
+        end
+        load_job_collection(hash, remote)
       end
     end
 
@@ -199,7 +213,7 @@ module JenkinsPipelineBuilder
         value = section[key]
         if key == :dependencies
           logger.info 'Resolving Dependencies for remote project'
-          load_remote_yaml(value)
+          load_remote_files(value)
           next
         end
         name = value[:name]
@@ -270,7 +284,7 @@ module JenkinsPipelineBuilder
       Archive::Tar::Minitar.unpack("#{file}.tar", file)
     end
 
-    def load_remote_yaml(dependencies)
+    def load_remote_files(dependencies)
       ### Load remote YAML
       # Download Tar.gz
       dependencies.each do |source|
@@ -380,7 +394,7 @@ module JenkinsPipelineBuilder
     end
 
     def resolve_project(project)
-      defaults = get_item('global')
+      defaults = find_defaults
       settings = defaults.nil? ? {} : defaults[:value] || {}
       project[:settings] = Compiler.get_settings_bag(project, settings) unless project[:settings]
       project_body = project[:value]
@@ -400,6 +414,14 @@ module JenkinsPipelineBuilder
       return false, 'Encountered errors exiting' unless errors.empty?
 
       [true, project]
+    end
+
+    def find_defaults
+      @job_collection.each_value do |item|
+        return item if item[:type] == 'defaults' || item[:type] == :defaults
+      end
+      # This is here for historical purposes
+      get_item('global')
     end
 
     def resolve_job_by_name(name, settings = {})
@@ -435,7 +457,7 @@ module JenkinsPipelineBuilder
           logger.info 'successfully resolved project'
           compiled_project = payload
         else
-          return false
+          return { project_name: 'Failed to resolve' }
         end
 
         errors = publish_jobs(compiled_project[:value][:jobs]) if compiled_project[:value][:jobs]
@@ -465,9 +487,9 @@ module JenkinsPipelineBuilder
 
     def create_or_update(job, xml)
       job_name = job[:name]
-      if @debug
+      if @debug || @file_mode
         logger.info "Will create job #{job}"
-        logger.info "#{xml}"
+        logger.info "#{xml}" if @debug
         FileUtils.mkdir_p(out_dir) unless File.exist?(out_dir)
         File.open("#{out_dir}/#{job_name}.xml", 'w') { |f| f.write xml }
         return

@@ -35,9 +35,13 @@ module JenkinsPipelineBuilder
     end
 
     def generate(path)
-      yaml = YAML.load_file(path)
+      if path.end_with? 'json'
+        hash = JSON.parse(IO.read(path))
+      else
+        hash = YAML.load_file(path)
+      end
 
-      yaml.each do |item|
+      hash.each do |item|
         Utils.symbolize_keys_deep!(item)
         create(item[:view]) if item[:view]
       end
@@ -168,7 +172,7 @@ module JenkinsPipelineBuilder
       if type == 'categorizedView'
         column_names << 'Categorized - Job'
       else
-        column_names << 'Name'
+        column_names.insert(2, 'Name')
       end
 
       result = []

@@ -92,6 +92,7 @@ module JenkinsPipelineBuilder
       @number = number
       @jobs = Marshal.load(Marshal.dump(jobs))
       @generator = Marshal.load(Marshal.dump(generator))
+      @project[:value][:pull_request_number] = "#{@number}"
 
       # Run
       run!
@@ -101,6 +102,13 @@ module JenkinsPipelineBuilder
 
     # Apply all changes
     def run!
+      git_version = JenkinsPipelineBuilder.registry.registry[:job][:scm_params].installed_version
+      if git_version >= Gem::Version.new(2.0)
+        @jobs.each_value do |j|
+          j[:value][:scm_params] ||= {}
+          j[:value][:scm_params][:changelog_to_branch] = { remote: 'origin', branch: 'pr-{{pull_request_number}}' }
+        end
+      end
       update_jobs!
       change_git!
       change_name!

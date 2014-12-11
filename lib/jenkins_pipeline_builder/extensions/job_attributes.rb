@@ -116,6 +116,7 @@ job_attribute do
 
   version '2.0' do
     parameters [
+      :changelog_to_branch,
       :credentials_id,
       :excluded_regions,
       :excluded_users,
@@ -147,6 +148,17 @@ job_attribute do
       doGenerateSubmoduleConfigurations false
       submoduleCfg
       extensions do
+        if params[:changelog_to_branch]
+          opts = params[:changelog_to_branch]
+          fail 'remote and branch are required for changelog_to_branch' unless opts[:remote] && opts[:branch]
+          send('hudson.plugins.git.extensions.impl.ChangelogToBranch') do
+            options do
+              compareRemote opts[:remote]
+              compareTarget opts[:branch]
+            end
+          end
+
+        end
         send('hudson.plugins.git.extensions.impl.WipeWorkspace') if params[:wipe_workspace]
         if params[:local_branch]
           send('hudson.plugins.git.extensions.impl.LocalBranch') do
@@ -188,7 +200,14 @@ job_attribute do
 
     send('jenkins.plugins.hipchat.HipChatNotifier_-HipChatJobProperty') do
       room params[:room]
-      startNotification params[:'start-notify'] || false
+      # :'start-notify' is legacy and evil, but I don't want anyone complaining
+      startNotification params[:start_notify] || params[:'start-notify'] || false
+      notifySuccess params[:success_notify] || true
+      notifyFailure params[:failure_notify] || true
+      notifyBackToNormal params[:normal_notify] || true
+      notifyAborted params[:aborted_notify] || true
+      notifyNotBuilt params[:notbuilt_notify] || false
+      notifyUnstable params[:unstable_notify] || true
     end
   end
 end

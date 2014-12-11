@@ -33,12 +33,18 @@ module JenkinsPipelineBuilder
 
       desc 'bootstrap Path', 'Generates pipeline from folder or a file'
       def bootstrap(path, project_name = nil)
-        Helper.setup(parent_options).bootstrap(path, project_name)
+        failed = Helper.setup(parent_options).bootstrap(path, project_name)
+        fail 'Encountered error during run' unless failed.empty?
       end
 
       desc 'pull_request Path', 'Generates jenkins jobs based on a git pull request.'
       def pull_request(path, project_name = nil)
         Helper.setup(parent_options).pull_request(path, project_name)
+      end
+
+      desc 'file Path', 'Does the same thing as bootstrap but doesn\'t actually create jobs on the server'
+      def file(path, project_name = nil)
+        Helper.setup(parent_options).file(path, project_name)
       end
     end
   end
