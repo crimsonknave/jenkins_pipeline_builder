@@ -207,7 +207,7 @@ wrapper do
   name :nodejs
   plugin_id 'nodejs'
   description 'Provides Jenkins integration for NodeJS & npm packages.'
-  jenkins_name 'Node Plugin'
+  jenkins_name 'Execute NodeJS'
   announced false
 
   xml do |wrapper|
