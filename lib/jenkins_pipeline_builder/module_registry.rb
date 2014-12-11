@@ -95,10 +95,7 @@ module JenkinsPipelineBuilder
           reg_value = reg_value[provider]
         end
         if reg_value.is_a? ExtensionSet
-          ext = reg_value.extension
-          logger.debug "Using #{ext.type} #{ext.name} version #{ext.min_version}"
-          success = execute_extension ext, value, n_xml
-          fail 'Encountered errors compiling the xml' unless success
+          use_extension_set reg_value, value, n_xml
         elsif value.is_a? Hash
           traverse_registry reg_value, value, n_xml, true
         elsif value.is_a? Array
@@ -110,21 +107,6 @@ module JenkinsPipelineBuilder
     end
 
     def execute_extension(extension, value, n_xml)
-      errors = []
-      params = extension.parameters
-      if params == false || params.any?
-        if value.is_a? Hash
-          value.each_key do |key|
-            next if params && params.include?(key)
-            errors << "Extension #{extension.name} does not support parameter #{key}"
-          end
-        end
-      end
-      errors.each do |error|
-        logger.error error
-      end
-      return false if errors.any?
-
       n_builders = n_xml.xpath(extension.path).first
       n_builders.instance_exec(value, &extension.before) if extension.before
       Nokogiri::XML::Builder.with(n_builders) do |xml|
@@ -132,6 +114,35 @@ module JenkinsPipelineBuilder
       end
       n_builders.instance_exec(value, &extension.after) if extension.after
       true
+    end
+
+    private
+
+    def check_params(ext, value)
+      params = ext.parameters
+      return [] unless params == false || params.any?
+      errors = []
+      return [] unless value.is_a? Hash
+      value.each_key do |key|
+        next if params && params.include?(key)
+        errors << "Extension #{extension.name} does not support parameter #{key}"
+      end
+      errors
+    end
+
+    def use_extension_set(registry_value, value, n_xml)
+      ext = registry_value.extension
+      logger.debug "Using #{ext.type} #{ext.name} version #{ext.min_version}"
+
+      errors = check_params ext, value
+
+      errors.each do |error|
+        logger.error error
+      end
+
+      fail 'Encountered errors compiling the xml' if errors.any?
+
+      execute_extension ext, value, n_xml
     end
   end
 end

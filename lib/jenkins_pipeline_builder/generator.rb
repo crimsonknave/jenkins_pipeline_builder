@@ -92,16 +92,7 @@ module JenkinsPipelineBuilder
       logger.info "Project: #{projects}"
       projects.each do |project|
         next unless project[:name] == project_name || project_name.nil?
-        logger.info "Using Project #{project}"
-        pull_job = find_pull_request_generator(project)
-        p_success, p_payload = compile_pull_request_generator(pull_job[:name], project)
-        next unless p_success
-        jobs = filter_pull_request_jobs(pull_job)
-        pull = JenkinsPipelineBuilder::PullRequestGenerator.new(project, jobs, p_payload)
-        @job_collection.merge! pull.jobs
-        success = create_pull_request_jobs(pull)
-        failed = success unless success
-        purge_pull_request_jobs(pull)
+        failed = true unless generate_pull_request_jobs project
       end
       !failed
     end
@@ -124,6 +115,23 @@ module JenkinsPipelineBuilder
     #
 
     private
+
+    def prepare_pull_request(project)
+      logger.info "Using Project #{project}"
+      pull_job = find_pull_request_generator(project)
+      success, payload = compile_pull_request_generator(pull_job[:name], project)
+      return false unless success
+      jobs = filter_pull_request_jobs(pull_job)
+      JenkinsPipelineBuilder::PullRequestGenerator.new(project, jobs, payload)
+    end
+
+    def generate_pull_request_jobs(project)
+      pull = prepare_pull_request project
+      @job_collection.merge! pull.jobs
+      success = create_pull_request_jobs(pull)
+      return false unless success
+      purge_pull_request_jobs(pull)
+    end
 
     def purge_pull_request_jobs(pull)
       pull.purge.each do |purge_job|
@@ -164,7 +172,7 @@ module JenkinsPipelineBuilder
       pull_jobs = pull_job[:value][:jobs] || []
       pull_jobs.each do |job|
         if job.is_a? String
-          jobs[job.to_s] = @job_collection[job.to_s]
+          jobs[job] = @job_collection[job]
         else
           jobs[job.keys.first.to_s] = @job_collection[job.keys.first.to_s]
         end
@@ -488,10 +496,7 @@ module JenkinsPipelineBuilder
     def create_or_update(job, xml)
       job_name = job[:name]
       if @debug || @file_mode
-        logger.info "Will create job #{job}"
-        logger.info "#{xml}" if @debug
-        FileUtils.mkdir_p(out_dir) unless File.exist?(out_dir)
-        File.open("#{out_dir}/#{job_name}.xml", 'w') { |f| f.write xml }
+        write_jobs job, xml
         return
       end
 
@@ -502,28 +507,41 @@ module JenkinsPipelineBuilder
       end
     end
 
+    def write_jobs(job, xml)
+      logger.info "Will create job #{job}"
+      logger.info "#{xml}" if @debug
+      FileUtils.mkdir_p(out_dir) unless File.exist?(out_dir)
+      File.open("#{out_dir}/#{job[:name]}.xml", 'w') { |f| f.write xml }
+    end
+
     def compile_job_to_xml(job)
-      fail 'Job name is not specified' unless job[:name]
+      job = check_job job
 
       logger.info "Creating Yaml Job #{job}"
-      job[:job_type] = 'free_style' unless job[:job_type]
+      payload = compile_freestyle_job_to_xml job
+
       case job[:job_type]
       when 'job_dsl'
-        xml = compile_freestyle_job_to_xml(job)
-        payload = update_job_dsl(job, xml)
+        payload = update_job_dsl job, payload
       when 'multi_project'
-        xml = compile_freestyle_job_to_xml(job)
-        payload = adjust_multi_project xml
+        payload = adjust_multi_project payload
       when 'build_flow'
-        xml = compile_freestyle_job_to_xml(job)
-        payload = add_job_dsl(job, xml)
-      when 'free_style', 'pull_request_generator'
-        payload = compile_freestyle_job_to_xml job
-      else
-        return false, "Job type: #{job[:job_type]} is not one of job_dsl, multi_project, build_flow or free_style"
+        payload = add_job_dsl job, payload
       end
 
       [true, payload]
+    end
+
+    def check_job(job)
+      fail 'Job name is not specified' unless job[:name]
+
+      job[:job_type] ||= 'free_style'
+      supported_job_types = %w(job_dsl multi_project build_flow free_style pull_request_generator)
+      unless supported_job_types.include? job[:job_type]
+        return false, "Job type: #{job[:job_type]} is not one of job_dsl, multi_project, build_flow or free_style"
+      end
+
+      job
     end
 
     def adjust_multi_project(xml)
@@ -534,6 +552,19 @@ module JenkinsPipelineBuilder
     end
 
     def compile_freestyle_job_to_xml(params)
+      params = extract_template_params(params)
+
+      xml = client.job.build_freestyle_config(params)
+      n_xml = Nokogiri::XML(xml, &:noblanks)
+
+      logger.debug 'Loading the required modules'
+      @module_registry.traverse_registry_path('job', params, n_xml)
+      logger.debug 'Module loading complete'
+
+      n_xml.to_xml
+    end
+
+    def extract_template_params(params)
       if params.key?(:template)
         template_name = params[:template]
         fail "Job template '#{template_name}' can't be resolved." unless @job_templates.key?(template_name)
@@ -544,14 +575,7 @@ module JenkinsPipelineBuilder
         puts "Template merged: #{template}"
       end
 
-      xml = client.job.build_freestyle_config(params)
-      n_xml = Nokogiri::XML(xml, &:noblanks)
-
-      logger.debug 'Loading the required modules'
-      @module_registry.traverse_registry_path('job', params, n_xml)
-      logger.debug 'Module loading complete'
-
-      n_xml.to_xml
+      params
     end
 
     def add_job_dsl(job, xml)

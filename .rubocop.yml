@@ -50,3 +50,7 @@ Style/VariableName:
 
 Style/SymbolProc:
   IgnoredMethods: new
+
+Metrics/AbcSize:
+  Exclude:
+    - 'spec/**/*'

@@ -25,23 +25,11 @@ module JenkinsPipelineBuilder
     def self.resolve_value(value, settings, job_collection)
       settings = settings.with_indifferent_access
       value_s = value.to_s.clone
-      # First we try to do job name correction
-      vars = value_s.scan(/{{job@(.*)}}/).flatten
-      if vars.count > 0
-        vars.select! do |var|
-          var_val = job_collection[var.to_s]
-          value_s.gsub!("{{job@#{var}}}", var_val[:value][:name]) unless var_val.nil?
-          var_val.nil?
-        end
-      end
-      # Then we look for normal values to replace
-      vars = value_s.scan(/{{([^{}@]+)}}/).flatten
-      vars.select! do |var|
-        var_val = settings[var]
-        value_s.gsub!("{{#{var}}}", var_val) unless var_val.nil?
-        var_val.nil?
-      end
-      return nil if vars.count != 0
+
+      job_name_correction(value_s, job_collection)
+      replace_values(value_s, settings)
+
+      return nil if vars(value_s).count != 0
       value_s
     end
 
@@ -137,6 +125,29 @@ module JenkinsPipelineBuilder
       end
       return false, errors unless errors.empty?
       [true, result]
+    end
+
+    def self.job_name_correction(value_s, job_collection)
+      vars = value_s.scan(/{{job@(.*)}}/).flatten
+      if vars.count > 0
+        vars.select! do |var|
+          var_val = job_collection[var.to_s]
+          value_s.gsub!("{{job@#{var}}}", var_val[:value][:name]) unless var_val.nil?
+          var_val.nil?
+        end
+      end
+    end
+
+    def self.replace_values(value_s, settings)
+      vars(value_s).select! do |var|
+        var_val = settings[var]
+        value_s.gsub!("{{#{var}}}", var_val) unless var_val.nil?
+        var_val.nil?
+      end
+    end
+
+    def self.vars(value_s)
+      value_s.scan(/{{([^{}@]+)}}/).flatten
     end
   end
 end

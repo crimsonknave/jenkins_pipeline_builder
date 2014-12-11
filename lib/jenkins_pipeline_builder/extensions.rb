@@ -23,17 +23,8 @@ require 'jenkins_pipeline_builder'
 JenkinsPipelineBuilder.registry.entries.each do |type, path|
   singular_type = type.to_s.singularize
   define_method singular_type do |&block|
-    set = JenkinsPipelineBuilder::ExtensionSet.new
-    set.instance_eval(&block)
-    set.blocks.each do |version, settings|
-      set.add_extension singular_type, version, settings, path
-    end
-    unless set.valid?
-      name = set.name || 'A plugin with no name provided'
-      puts "Encountered errors while registering #{name}"
-      puts set.errors.map { |k, v| "#{k}: #{v}" }.join(', ')
-      return false
-    end
+    set = JenkinsPipelineBuilder::ExtensionSet.new singular_type, path, &block
+    return false unless set.valid?
     JenkinsPipelineBuilder.registry.register([:job, type], set)
     versions = set.extensions.map(&:min_version)
     puts "Successfully registered #{set.name} for versions #{versions}" if set.announced
@@ -67,17 +58,8 @@ def scm_type(&block)
 end
 
 def job_attribute(&block)
-  set = JenkinsPipelineBuilder::ExtensionSet.new
-  set.instance_eval(&block)
-  set.blocks.each do |version, settings|
-    set.add_extension :job_attribute, version, settings
-  end
-  unless set.valid?
-    name = set.name || 'A plugin with no name provided'
-    puts "Encountered errors while registering #{name}"
-    puts set.errors.map { |k, v| "#{k}: #{v}" }.join(', ')
-    return false
-  end
+  set = JenkinsPipelineBuilder::ExtensionSet.new :job_attribute, &block
+  return false unless set.valid?
   JenkinsPipelineBuilder.registry.register([:job], set)
   versions = set.extensions.map(&:min_version)
   puts "Successfully registered #{set.name} for versions #{versions}" if set.announced
@@ -102,10 +84,16 @@ module JenkinsPipelineBuilder
 
     attr_accessor :blocks, :extensions, :settings
 
-    def initialize
+    def initialize(type, path = nil, &block)
       @blocks = {}
       @settings = {}
       @extensions = []
+
+      instance_eval(&block)
+
+      blocks.each do |version, settings|
+        add_extension type, version, settings, path
+      end
     end
 
     def installed_version=(version)
@@ -129,8 +117,9 @@ module JenkinsPipelineBuilder
       return @version if @version
       reg = JenkinsPipelineBuilder.registry
       version = reg.versions[settings[:plugin_id]]
-      puts reg.versions.inspect if version.nil?
-      fail "Plugin #{settings[:name]} is not installed (plugin_id: #{settings[:plugin_id]})" if version.nil?
+      if version.nil?
+        fail "Plugin #{settings[:name]} is not installed (plugin_id: #{settings[:plugin_id]})"
+      end
       self.installed_version = version
       @version
     end
@@ -139,11 +128,13 @@ module JenkinsPipelineBuilder
       # TODO: Support multiple xml sections for the native to jenkins plugins
       return extensions.first if settings[:plugin_id] == 'builtin'
 
-      ordered_version_list.each do |version|
-        return versions[version] if version <= installed_version
+      extension = versions[highest_allowed_version]
+
+      unless extension
+        fail "Can't find #{name} with version lte #{installed_version}, versions available: #{available_versions}"
       end
 
-      fail "Can't find version of #{name} lte #{installed_version}, versions available are #{versions.keys.map(&:to_s)}"
+      extension
     end
 
     def merge(other_set)
@@ -169,11 +160,7 @@ module JenkinsPipelineBuilder
     end
 
     def xml(path: false, version: '0', &block)
-      if @min_version
-        version = @min_version
-      elsif version != '0'
-        deprecation_warning(settings[:name], 'xml')
-      end
+      version = choose_version(version, 'xml')
       unless block
         fail "no block found for version #{version}" unless blocks.key version
         return blocks[version][:block]
@@ -192,11 +179,7 @@ module JenkinsPipelineBuilder
 
     [:after, :before].each do |method_name|
       define_method method_name do |version: '0', &block|
-        if @min_version
-          version = @min_version
-        elsif version != '0'
-          deprecation_warning(settings[:name], method_name)
-        end
+        version = choose_version(version, method_name)
 
         return instance_variable_get(method_name) unless block
         blocks[version] = {} unless blocks[version]
@@ -205,7 +188,13 @@ module JenkinsPipelineBuilder
     end
 
     def valid?
-      errors.empty?
+      valid = errors.empty?
+      unless valid
+        name = set.name || 'A plugin with no name provided'
+        puts "Encountered errors while registering #{name}"
+        puts set.errors.map { |k, v| "#{k}: #{v}" }.join(', ')
+      end
+      valid
     end
 
     def errors
@@ -226,12 +215,31 @@ module JenkinsPipelineBuilder
       end
     end
 
+    def available_versions
+      versions.keys.map(&:to_s)
+    end
+
     def ordered_version_list
       versions.keys.sort.reverse
     end
 
     def deprecation_warning(name, block)
       puts "WARNING: #{name} set the version in the #{block} block, this is deprecated. Please use a version block."
+    end
+
+    def highest_allowed_version
+      ordered_version_list.each do |version|
+        return version if version <= installed_version
+      end
+    end
+
+    def choose_version(ver, method_name)
+      if @min_version
+        return @min_version
+      elsif ver != '0'
+        deprecation_warning(settings[:name], method_name)
+      end
+      ver
     end
   end
 end

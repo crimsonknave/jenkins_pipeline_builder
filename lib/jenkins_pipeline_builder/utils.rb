@@ -33,12 +33,13 @@ module JenkinsPipelineBuilder
     def self.symbolize_keys_deep!(h)
       return unless h.is_a?(Hash)
       h.keys.each do |k|
-        ks    = k.respond_to?(:to_sym) ? k.to_sym : k
+        ks = k.respond_to?(:to_sym) ? k.to_sym : k
         h[ks] = h.delete k # Preserve order even when k == ks
         symbolize_keys_deep! h[ks] if h[ks].is_a? Hash
         h[ks].each { |item| symbolize_keys_deep!(item) } if h[ks].is_a?(Array)
       end
     end
+
     def self.hash_merge!(old_hash, new_hash)
       old_hash.merge!(new_hash) do |_key, old, new|
         if old.is_a?(Hash) && new.is_a?(Hash)

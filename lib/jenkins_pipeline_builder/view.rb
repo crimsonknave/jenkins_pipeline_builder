@@ -65,39 +65,62 @@ module JenkinsPipelineBuilder
     #   specified
     #
     def create(params)
-      # Name is a required parameter. Raise an error if not specified
-      fail ArgumentError, 'Name is required for creating view' unless params.is_a?(Hash) && params[:name]
-      clean_up_views(params) unless @generator.debug
-      params[:type] ||= 'listview'
+      params = initialize_params params
+
+      return if @generator.debug
+      clean_up_views(params)
       create_base_view(params[:name], params[:type], params[:parent_view])
       @logger.debug "Creating a #{params[:type]} view with params: #{params.inspect}"
 
-      if @generator.debug
-        # pp post_params(params)
-        return
-      end
-
-      view_path = params[:parent_view].nil? ? '' : "/view/#{params[:parent_view]}"
-      view_path += "/view/#{params[:name]}/configSubmit"
-
-      @client.api_post_request(view_path, post_params(params))
+      @client.api_post_request(view_path(params), post_params(params))
     end
 
     private
 
+    def initialize_params(params)
+      fail ArgumentError, 'Name is required for creating view' unless params.is_a?(Hash) && params[:name]
+      params[:type] ||= 'listview'
+      params
+    end
+
+    def view_path(params)
+      view_path = params[:parent_view].nil? ? '' : "/view/#{params[:parent_view]}"
+      view_path + "/view/#{params[:name]}/configSubmit"
+    end
+
     def clean_up_views(params)
       # If we have a parent view, we need to do some additional checks
       if params[:parent_view]
-        create_base_view(params[:parent_view], 'nestedView') unless exists?(params[:parent_view])
+        create_parent_view(params[:parent_view])
         delete(params[:name], params[:parent_view]) if exists?(params[:name], params[:parent_view])
-      else
-        delete(params[:name]) if exists?(params[:name])
+      elsif exists?(params[:name])
+        delete(params[:name])
       end
     end
 
     def post_params(params)
-      statuses = { 'enabled_jobs_only' => '1', 'disabled_jobs_only' => '2' }
+      payload = post_payload(params)
+      payload['filterQueue'] = 'on' if params[:filter_queue]
+      payload['filterExecutors'] = 'on' if params[:filter_executors]
+      if params[:regex]
+        payload['useincluderegex'] = 'on'
+        payload['includeRegex'] = params[:regex]
+      end
+      payload
+    end
 
+    def post_payload(params)
+      statuses = { 'enabled_jobs_only' => '1', 'disabled_jobs_only' => '2' }
+      {
+        'name' => params[:name],
+        'mode' => get_mode(params[:type]),
+        'description' => params[:description],
+        'statusFilter' => statuses.fetch(params[:status_filter], ''),
+        'json' => post_json(params)
+      }
+    end
+
+    def post_json(params)
       json = {
         'name' => params[:name],
         'description' => params[:description],
@@ -105,18 +128,8 @@ module JenkinsPipelineBuilder
         'statusFilter' => '',
         'columns' => get_columns(params[:type])
       }
-      json.merge!('groupingRules' => params[:groupingRules]) if params[:groupingRules]
-      payload = {
-        'name' => params[:name],
-        'mode' => get_mode(params[:type]),
-        'description' => params[:description],
-        'statusFilter' => statuses.fetch(params[:status_filter], ''),
-        'json' => json.to_json
-      }
-      payload.merge!('filterQueue' => 'on') if params[:filter_queue]
-      payload.merge!('filterExecutors' => 'on') if params[:filter_executors]
-      payload.merge!('useincluderegex' => 'on', 'includeRegex' => params[:regex]) if params[:regex]
-      payload
+      json['groupingRules'] = params[:groupingRules] if params[:groupingRules]
+      json.to_json
     end
 
     def get_mode(type)
@@ -136,6 +149,10 @@ module JenkinsPipelineBuilder
       else
         fail "Type #{type} is not supported by Jenkins."
       end
+    end
+
+    def create_parent_view(parent)
+      create_base_view(parent, 'nestedView') unless exists?(parent)
     end
 
     # Creates a new empty view of the given type
