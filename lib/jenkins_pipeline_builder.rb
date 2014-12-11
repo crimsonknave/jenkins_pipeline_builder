@@ -24,10 +24,12 @@ require 'active_support'
 require 'active_support/core_ext'
 
 require 'jenkins_pipeline_builder/version'
+require 'jenkins_pipeline_builder/generator_shared_methods'
 require 'jenkins_pipeline_builder/utils'
 require 'jenkins_pipeline_builder/compiler'
 require 'jenkins_pipeline_builder/module_registry'
 require 'jenkins_pipeline_builder/pull_request'
+require 'jenkins_pipeline_builder/pull_request_generator'
 require 'jenkins_pipeline_builder/view'
 require 'jenkins_pipeline_builder/generator'
 
@@ -41,7 +43,6 @@ module JenkinsPipelineBuilder
     def credentials=(creds)
       @credentials = creds
       @client = JenkinsApi::Client.new(credentials)
-      generator.logger = @client.logger
       @credentials
     end
 

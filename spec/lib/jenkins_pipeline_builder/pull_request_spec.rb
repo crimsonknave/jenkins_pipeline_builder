@@ -2,7 +2,16 @@ require File.expand_path('../spec_helper', __FILE__)
 require 'webmock/rspec'
 
 describe JenkinsPipelineBuilder::PullRequestGenerator do
-  let(:pull_request_generator) { JenkinsPipelineBuilder::PullRequestGenerator }
+  before(:all) do
+    JenkinsPipelineBuilder.credentials = {
+      server_ip: '127.0.0.1',
+      server_port: 8080,
+      username: 'username',
+      password: 'password',
+      log_location: '/dev/null'
+    }
+  end
+  let(:klass) { JenkinsPipelineBuilder::PullRequestGenerator }
   let(:project) { { name: 'pull_req_test', type: :project, value: { name: 'pull_req_test', jobs: ['{{name}}-00', '{{name}}-10', '{{name}}-11'] } } }
   let(:jobs) { { '{{name}}-10' => { name: '{{name}}-10', type: :'job-template', value: { name: '{{name}}-10', description: '{{description}}', publishers: [{ downstream: { project: '{{job@{{name}}-11}}' } }] }  }, '{{name}}-11' => { name: '{{name}}-11', type: :'job-template', value: { name: '{{name}}-11', description: '{{description}}' } } } }
   let(:create_jobs) { [{ name: 'pull_req_test-PR5', type: :project, value: { name: 'pull_req_test-PR5', jobs: ['{{name}}-10', '{{name}}-11'], pull_request_number: '5' } }, { name: 'pull_req_test-PR6', type: :project, value: { name: 'pull_req_test-PR6', jobs: ['{{name}}-10', '{{name}}-11'], pull_request_number: '6' } }] }
@@ -13,16 +22,19 @@ describe JenkinsPipelineBuilder::PullRequestGenerator do
     stub_request(:any, 'http://username:password@127.0.0.1:8080/api/json').to_return(body: '{"assignedLabels":[{}],"mode":"NORMAL","nodeDescription":"the master Jenkins node","nodeName":"","numExecutors":2,"description":null,"jobs":[{"name":"PurgeTest-PR1","url":"http://localhost:8080/job/PurgeTest-PR1/","color":"notbuilt" },{"name":"PurgeTest-PR3","url":"http://localhost:8080/job/PurgeTest-PR3/","color":"notbuilt" },{"name":"PurgeTest-PR4","url":"http://localhost:8080/job/PurgeTest-PR4/","color":"notbuilt"}],"overallLoad":{},"primaryView":{"name":"All","url":"http://localhost:8080/" },"quietingDown":false,"slaveAgentPort":0,"unlabeledLoad":{},"useCrumbs":false,"useSecurity":true,"views":[{"name":"All","url":"http://localhost:8080/"}]}')
   end
   describe '#initialize' do
-    after(:all) do
-      FileUtils.rm_r 'pull_requests.csv'
+    before :each do
+      JenkinsPipelineBuilder.generator.job_collection = pull_request
     end
+
+    # FIXME: These two are the same?
+    # Also, we need more tests here
     it 'can work without a csv' do
-      pull = pull_request_generator.new(project, jobs, pull_request)
+      pull = klass.new(project)
       expect(pull.purge.count).to eq(0)
       expect(pull.create).to eq(create_jobs)
     end
     it 'can work with a csv' do
-      pull = pull_request_generator.new(project, jobs, pull_request)
+      pull = klass.new(project)
       expect(pull.purge.count).to eq(0)
       expect(pull.create).to eq(create_jobs)
     end

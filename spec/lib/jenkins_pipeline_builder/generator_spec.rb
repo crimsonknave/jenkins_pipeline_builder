@@ -118,6 +118,13 @@ describe JenkinsPipelineBuilder::Generator do
       allow(JenkinsPipelineBuilder.client).to receive(:plugin).and_return double(
         list_installed: { 'description' => '20.0', 'git' => '20.0' })
     end
+
+    after :each do
+      Dir["#{@job_name}*.xml"].each do |file|
+        File.delete(file)
+      end
+    end
+
     it 'produces no errors while creating pipeline PullRequest' do
       # Dummy data
       purge = []
@@ -148,16 +155,13 @@ describe JenkinsPipelineBuilder::Generator do
       }
       # Run the test
       @generator.debug = true
-      job_name = 'PullRequest'
+      @job_name = 'PullRequest'
       path = File.expand_path('../fixtures/generator_tests/pullrequest_pipeline', __FILE__)
       expect(JenkinsPipelineBuilder::PullRequestGenerator).to receive(:new).once.and_return(
         double(purge: purge, create: create, jobs: jobs)
       )
-      success = @generator.pull_request(path, job_name)
+      success = @generator.pull_request(path, @job_name)
       expect(success).to be_truthy
-      Dir["#{job_name}*.xml"].each do |file|
-        File.delete(file)
-      end
     end
     # Things to check for
     # Fail - no PR job type found
