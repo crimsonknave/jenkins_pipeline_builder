@@ -25,7 +25,6 @@ module JenkinsPipelineBuilder
     def self.resolve_value(value, settings, job_collection)
       settings = settings.with_indifferent_access
       value_s = value.to_s.clone
-
       job_name_correction(value_s, job_collection)
       replace_values(value_s, settings)
 
@@ -49,6 +48,9 @@ module JenkinsPipelineBuilder
     end
 
     def self.compile(item, settings = {}, job_collection = {})
+      success, item = handle_enable(item, settings, job_collection)
+      return false, item unless success
+
       case item
       when String
         return compile_string item, settings, job_collection
@@ -91,21 +93,31 @@ module JenkinsPipelineBuilder
       [true, result]
     end
 
-    def self.handle_enable(item)
+    def self.handle_enable(item, settings, job_collection)
+      return true, item unless item.is_a? Hash
       if item.key?(:enabled) && item.key?(:parameters) && item.length == 2
-        return {} unless item[:enabled]
-        item = item.merge item[:parameters]
-        item.delete :parameters
-        item.delete :enabled
+        enabled_switch = resolve_value(item[:enabled], settings, job_collection)
+        return [true, {}] if enabled_switch == 'false'
+        if enabled_switch != 'true'
+          return [false, { 'value error' => "Invalid value for #{item[:enabled]}: #{enabled_switch}" }]
+        end
+        if item[:parameters].is_a? Hash
+          item = item.merge item[:parameters]
+          item.delete :parameters
+          item.delete :enabled
+        else
+          item = item[:parameters]
+        end
       end
-      item
+      [true, item]
     end
 
     def self.compile_hash(item, settings, job_collection)
+      success, item = handle_enable(item, settings, job_collection)
+      return false, item unless success
+
       errors = {}
       result = {}
-
-      item = handle_enable item
 
       item.each do |key, value|
         if value.nil?
@@ -121,7 +133,7 @@ module JenkinsPipelineBuilder
           errors[key] = "Failed to resolve:\n===>key: #{key}\n\n===>value: #{value}\n\n===>of: #{item}"
           next
         end
-        result[key] = payload
+        result[key] = payload unless payload == {}
       end
       return false, errors unless errors.empty?
       [true, result]
@@ -141,7 +153,7 @@ module JenkinsPipelineBuilder
     def self.replace_values(value_s, settings)
       vars(value_s).select! do |var|
         var_val = settings[var]
-        value_s.gsub!("{{#{var}}}", var_val) unless var_val.nil?
+        value_s.gsub!("{{#{var}}}", var_val.to_s) unless var_val.nil?
         var_val.nil?
       end
     end

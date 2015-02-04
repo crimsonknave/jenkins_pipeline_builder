@@ -57,7 +57,7 @@ module JenkinsPipelineBuilder
       if projects.any?
         errors = publish_project(project_name)
       else
-        errors = publish_jobs(jobs)
+        errors = publish_jobs(standalone jobs)
       end
       errors.each do |k, v|
         logger.error "Encountered errors compiling: #{k}:"
@@ -92,5 +92,20 @@ module JenkinsPipelineBuilder
       xml = client.job.get_config(job_name)
       File.open(job_name + '.xml', 'w') { |f| f.write xml }
     end
+
+    private
+
+    # Converts standalone jobs to the format that they have when loaded as part of a project.
+    # This addresses an issue where #pubish_jobs assumes that each job will be wrapped
+    # with in a hash a referenced under a key called :result, which is what happens when
+    # it is loaded as part of a project.
+    #
+    # @return An array of jobs
+    #
+    def standalone(jobs)
+      jobs.map! { |job| { result: job } }
+    end
+
+
   end
 end
