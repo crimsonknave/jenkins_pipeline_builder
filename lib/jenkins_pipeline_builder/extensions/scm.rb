@@ -2,7 +2,6 @@ scm_type do
   name :git
   plugin_id 'git'
   version '0' do
-
     xml do |params|
       scm class: 'hudson.plugins.git.GitSCM' do
         configVersion 2

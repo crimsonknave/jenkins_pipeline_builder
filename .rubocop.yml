@@ -4,21 +4,23 @@
 # one by one as the offenses are removed from the code base.
 # Note that changes in the inspected code, or installation of new
 # versions of RuboCop, may require this file to be generated again.
-
 #######
 # WIP
+Metrics/AbcSize:
+  # Want to bring this down to the default of 15, keep the exclude though
+  Max: 29
+  Exclude:
+    - 'spec/**/*'
+
 Metrics/CyclomaticComplexity:
   Max: 9
 
 Metrics/PerceivedComplexity:
   Max: 11
 
-########
-# Fix these later
-# Configuration parameters: CountComments.
 Metrics/ClassLength:
-  #Enabled: false
   Max: 500
+
 
 #######
 # Finalized settings
@@ -51,6 +53,3 @@ Style/VariableName:
 Style/SymbolProc:
   IgnoredMethods: new
 
-Metrics/AbcSize:
-  Exclude:
-    - 'spec/**/*'

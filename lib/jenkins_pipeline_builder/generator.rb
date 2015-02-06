@@ -75,7 +75,6 @@ module JenkinsPipelineBuilder
       projects.each do |project|
         next unless project[:name] == project_name || project_name.nil?
         failed = true unless PullRequestGenerator.new project
-        #failed = true unless generate_pull_request_jobs project
       end
       !failed
     end
@@ -105,7 +104,5 @@ module JenkinsPipelineBuilder
     def standalone(jobs)
       jobs.map! { |job| { result: job } }
     end
-
-
   end
 end

@@ -2,7 +2,12 @@ require File.expand_path('../spec_helper', __FILE__)
 require 'webmock/rspec'
 
 describe JenkinsPipelineBuilder::PullRequestGenerator do
-  before(:all) do
+  before :each do
+    allow(JenkinsPipelineBuilder.client).to receive(:plugin).and_return double(
+      list_installed: { 'description' => '20.0', 'git' => '20.0' })
+  end
+
+  before :all do
     JenkinsPipelineBuilder.credentials = {
       server_ip: '127.0.0.1',
       server_port: 8080,
@@ -11,10 +16,9 @@ describe JenkinsPipelineBuilder::PullRequestGenerator do
       log_location: '/dev/null'
     }
   end
-  let(:klass) { JenkinsPipelineBuilder::PullRequestGenerator }
-  let(:project) { { name: 'pull_req_test', type: :project, value: { name: 'pull_req_test', jobs: ['{{name}}-00', '{{name}}-10', '{{name}}-11'] } } }
-  let(:jobs) { { '{{name}}-10' => { name: '{{name}}-10', type: :'job-template', value: { name: '{{name}}-10', description: '{{description}}', publishers: [{ downstream: { project: '{{job@{{name}}-11}}' } }] }  }, '{{name}}-11' => { name: '{{name}}-11', type: :'job-template', value: { name: '{{name}}-11', description: '{{description}}' } } } }
-  let(:create_jobs) { [{ name: 'pull_req_test-PR5', type: :project, value: { name: 'pull_req_test-PR5', jobs: ['{{name}}-10', '{{name}}-11'], pull_request_number: '5' } }, { name: 'pull_req_test-PR6', type: :project, value: { name: 'pull_req_test-PR6', jobs: ['{{name}}-10', '{{name}}-11'], pull_request_number: '6' } }] }
+  let(:project) { { name: 'pull_req_test', type: :project, value: { name: 'pull_req_test', login_config: 'foo', jobs: ['{{name}}-00', '{{name}}-10', '{{name}}-11'] } } }
+  let(:jobs) { { '{{name}}-00' => { name: '{{name}}-00', type: 'job', value: pull_request }, '{{name}}-10' => { name: '{{name}}-10', type: :'job-template', value: { name: '{{name}}-10', description: '{{description}}', publishers: [{ downstream: { project: '{{job@{{name}}-11}}' } }] } }, '{{name}}-11' => { name: '{{name}}-11', type: :'job-template', value: { name: '{{name}}-11', description: '{{description}}' } } } }
+  let(:create_jobs) { [{ name: 'pull_req_test-PR5', type: :project, value: { name: 'pull_req_test-PR5', login_config: 'foo', jobs: ['{{name}}-10', '{{name}}-11'], pull_request_number: '5' } }, { name: 'pull_req_test-PR6', type: :project, value: { name: 'pull_req_test-PR6', login_config: 'foo', jobs: ['{{name}}-10', '{{name}}-11'], pull_request_number: '6' } }] }
   let(:pull_request) { { name: '{{name}}-00', type: :job, name: '{{name}}-00', job_type: 'pull_request_generator', git_url: 'https://www.github.com/', git_repo: 'jenkins_pipeline_builder', git_org: 'constantcontact', jobs: ['{{name}}-10', '{{name}}-11'], builders: [{ shell_command: 'generate -v || gem install jenkins_pipeline_builder\ngenerate pipeline -c config/{{login_config}} pull_request pipeline/ {{name}}\n' }] } }
   before do
     # Request to get current pull requests from github
@@ -23,18 +27,18 @@ describe JenkinsPipelineBuilder::PullRequestGenerator do
   end
   describe '#initialize' do
     before :each do
-      JenkinsPipelineBuilder.generator.job_collection = pull_request
+      JenkinsPipelineBuilder.generator.job_collection = jobs
     end
 
     # FIXME: These two are the same?
     # Also, we need more tests here
     it 'can work without a csv' do
-      pull = klass.new(project)
+      pull = described_class.new(project)
       expect(pull.purge.count).to eq(0)
       expect(pull.create).to eq(create_jobs)
     end
     it 'can work with a csv' do
-      pull = klass.new(project)
+      pull = described_class.new(project)
       expect(pull.purge.count).to eq(0)
       expect(pull.create).to eq(create_jobs)
     end

@@ -65,20 +65,20 @@ module JenkinsPipelineBuilder
           next
         end
         name = value[:name]
-        if @job_collection.key?(name)
+        if job_collection.key?(name)
           if remote
             logger.info "Duplicate item with name '#{name}' was detected from the remote folder."
           else
             fail "Duplicate item with name '#{name}' was detected."
           end
         else
-          @job_collection[name.to_s] = { name: name.to_s, type: key, value: value }
+          job_collection[name.to_s] = { name: name.to_s, type: key, value: value }
         end
       end
     end
 
     def get_item(name)
-      @job_collection[name.to_s]
+      job_collection[name.to_s]
     end
 
     def load_extensions(path)
@@ -241,9 +241,8 @@ module JenkinsPipelineBuilder
       errors
     end
 
-
     def find_defaults
-      @job_collection.each_value do |item|
+      job_collection.each_value do |item|
         return item if item[:type] == 'defaults' || item[:type] == :defaults
       end
       # This is here for historical purposes
@@ -255,13 +254,13 @@ module JenkinsPipelineBuilder
       fail "Failed to locate job by name '#{name}'" if job.nil?
       job_value = job[:value]
       logger.debug "Compiling job #{name}"
-      success, payload = Compiler.compile(job_value, settings, @job_collection)
+      success, payload = Compiler.compile(job_value, settings, job_collection)
       [success, payload]
     end
 
     def projects
       result = []
-      @job_collection.values.each do |item|
+      job_collection.values.each do |item|
         result << item if item[:type] == :project
       end
       result
@@ -269,7 +268,7 @@ module JenkinsPipelineBuilder
 
     def jobs
       result = []
-      @job_collection.values.each do |item|
+      job_collection.values.each do |item|
         result << item if item[:type] == :job
       end
       result
@@ -446,7 +445,7 @@ module JenkinsPipelineBuilder
     end
 
     def with_override
-      @job_collection.each do |_, v|
+      job_collection.each do |_, v|
         new_jobs = []
         removes = []
         next unless v[:value][:jobs]

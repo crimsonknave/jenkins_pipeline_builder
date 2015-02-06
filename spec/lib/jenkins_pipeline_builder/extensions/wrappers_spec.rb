@@ -89,5 +89,4 @@ describe 'wrappers' do
       expect(node.first.content).to match 'Node-0.10.24'
     end
   end
-
 end

@@ -67,8 +67,10 @@ describe 'scm' do
       end
 
       context 'userRemoteConfigs' do
+        let(:registry) { JenkinsPipelineBuilder.registry }
+
         it 'empty params' do
-          JenkinsPipelineBuilder.registry.traverse_registry_path('job', { scm: { provider: :git } }, @n_xml)
+          registry.traverse_registry_path('job', { scm: { provider: :git } }, @n_xml)
 
           expect(@n_xml.at_css('scm userRemoteConfigs')).to be_truthy
           expect(@n_xml.at_css('scm userRemoteConfigs name').content).to eq ''
@@ -77,21 +79,21 @@ describe 'scm' do
         end
 
         it 'name parameter' do
-          JenkinsPipelineBuilder.registry.traverse_registry_path('job', { scm: { provider: :git, name: :foo } }, @n_xml)
+          registry.traverse_registry_path('job', { scm: { provider: :git, name: :foo } }, @n_xml)
 
           expect(@n_xml.at_css('scm userRemoteConfigs')).to be_truthy
           expect(@n_xml.at_css('scm userRemoteConfigs name').content).to eq 'foo'
         end
 
         it 'refspec' do
-          JenkinsPipelineBuilder.registry.traverse_registry_path('job', { scm: { provider: :git, refspec: :foo } }, @n_xml)
+          registry.traverse_registry_path('job', { scm: { provider: :git, refspec: :foo } }, @n_xml)
 
           expect(@n_xml.at_css('scm userRemoteConfigs')).to be_truthy
           expect(@n_xml.at_css('scm userRemoteConfigs refspec').content).to eq 'foo'
         end
 
         it 'url' do
-          JenkinsPipelineBuilder.registry.traverse_registry_path('job', { scm: { provider: :git, url: :foo } }, @n_xml)
+          registry.traverse_registry_path('job', { scm: { provider: :git, url: :foo } }, @n_xml)
 
           expect(@n_xml.at_css('scm userRemoteConfigs')).to be_truthy
           expect(@n_xml.at_css('scm userRemoteConfigs url').content).to eq 'foo'

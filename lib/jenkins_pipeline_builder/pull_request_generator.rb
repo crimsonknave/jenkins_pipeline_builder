@@ -33,15 +33,15 @@ module JenkinsPipelineBuilder
 
       logger.info "Using Project #{project}"
       pull_job = find_pull_request_generator(project)
-      success, pull_job = compile_pull_request_generator(pull_job[:name], project)
+      success, generator_job = compile_pull_request_generator(pull_job[:name], project)
       fail 'Unable to compile pull request' unless success
       @jobs = filter_pull_request_jobs(pull_job)
 
-      pull_requests = check_for_pull pull_job
+      pull_requests = check_for_pull generator_job
       purge_old(pull_requests, project)
       pull_requests.each do |number|
         # Manipulate the YAML
-        req = JenkinsPipelineBuilder::PullRequest.new(project, number, jobs, pull_job)
+        req = JenkinsPipelineBuilder::PullRequest.new(project, number, jobs, generator_job)
         @jobs.merge! req.jobs
         project_new = req.project
 
@@ -110,25 +110,15 @@ module JenkinsPipelineBuilder
 
     def find_pull_request_generator(project)
       project_jobs = project[:value][:jobs] || []
-      puts '0--000000000000000'
-      puts project_jobs
-      puts '0--000000000000000'
       pull_job = nil
       project_jobs.each do |job|
-        puts '1'
         job = job.keys.first if job.is_a? Hash
-        puts job.inspect
-        puts job_collection.inspect
         job = job_collection[job.to_s]
-        puts "3: #{job.inspect}"
         pull_job = job if job[:value][:job_type] == 'pull_request_generator'
-        puts '4'
-        puts pull_job.inspect
       end
       fail 'No Pull Request Job Found for Project' unless pull_job
       pull_job
     end
-
 
     # Check for Github Pull Requests
     #

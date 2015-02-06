@@ -40,7 +40,6 @@ describe 'job_attributes' do
 
   context 'scm params' do
     before :each do
-
       builder = Nokogiri::XML::Builder.new { |xml| xml.scm }
       @n_xml = builder.doc
 
@@ -52,6 +51,7 @@ describe 'job_attributes' do
         end
       end
     end
+
     context '>= 2.0' do
       before :each do
         JenkinsPipelineBuilder.registry.registry[:job][:scm_params].installed_version = '2.0'

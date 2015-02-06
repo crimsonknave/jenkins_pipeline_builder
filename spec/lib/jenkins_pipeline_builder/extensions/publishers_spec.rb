@@ -69,7 +69,6 @@ describe 'publishers' do
       root_pom = sonar_nodes.select { |node| node.name == 'rootPom' }
       expect(root_pom.first.content).to match 'project_war/pom.xml'
     end
-
   end
 
   context 'description_setter' do
@@ -77,6 +76,7 @@ describe 'publishers' do
       allow(JenkinsPipelineBuilder.client).to receive(:plugin).and_return double(
         list_installed: { 'description-setter' => '20.0' })
     end
+
     it 'generates a configuration' do
       params = { publishers: { description_setter: {} } }
 

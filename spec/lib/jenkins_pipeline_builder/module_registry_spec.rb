@@ -4,9 +4,9 @@ describe JenkinsPipelineBuilder::ModuleRegistry do
   after :each do
     JenkinsPipelineBuilder.registry.clear_versions
   end
+
   describe '#register' do
     it 'should return item by a specified path' do
-
       registry = JenkinsPipelineBuilder::ModuleRegistry.new
       set = double
       allow(set).to receive(:name).and_return :foo
@@ -53,6 +53,7 @@ describe JenkinsPipelineBuilder::ModuleRegistry do
         end
       end
     end
+
     it 'registered the job_attributes correctly' do
       job_attributes = {
         description: ['0'],
@@ -79,6 +80,7 @@ describe JenkinsPipelineBuilder::ModuleRegistry do
         end
       end
     end
+
     it 'registered the publishers correctly' do
       publishers = {
         description_setter: ['0'],
@@ -101,6 +103,7 @@ describe JenkinsPipelineBuilder::ModuleRegistry do
         end
       end
     end
+
     it 'registered the wrappers correctly' do
       wrappers = {
         ansicolor: ['0'],
@@ -124,8 +127,8 @@ describe JenkinsPipelineBuilder::ModuleRegistry do
       end
     end
   end
-  describe '#initialize' do
 
+  describe '#initialize' do
   end
 
   describe '#version' do
@@ -146,23 +149,18 @@ describe JenkinsPipelineBuilder::ModuleRegistry do
   end
 
   describe '#entries' do
-
   end
 
   describe '#get' do
-
   end
 
   describe '#get_by_path_collection' do
-
   end
 
   describe '#traverse_registry_path' do
-
   end
 
   describe '#traverse_registry' do
-
   end
 
   describe '#execute_extension' do
@@ -202,7 +200,6 @@ describe JenkinsPipelineBuilder::ModuleRegistry do
       end
       expect(JenkinsPipelineBuilder.registry.registry[:job][:wrappers]).to have_key :test_name
       @ext = JenkinsPipelineBuilder.registry.registry[:job][:wrappers][:test_name].extension
-
     end
 
     after :each do
