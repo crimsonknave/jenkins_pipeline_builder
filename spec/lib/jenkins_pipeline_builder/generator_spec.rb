@@ -95,7 +95,9 @@ describe JenkinsPipelineBuilder::Generator do
     end
 
     it 'produces no errors while creating a single job' do
+      puts 'before'
       errors = bootstrap(fixture_path('sample_pipeline/SamplePipeline-10-Commit.yaml'), 'SamplePipeline-10-Commit')
+      puts 'after'
       expect(errors).to be_empty
     end
 

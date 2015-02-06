@@ -8,7 +8,7 @@
 # WIP
 Metrics/AbcSize:
   # Want to bring this down to the default of 15, keep the exclude though
-  Max: 29
+  #Max: 29
   Exclude:
     - 'spec/**/*'
 
@@ -30,7 +30,7 @@ Metrics/LineLength:
   Exclude:
     - 'spec/lib/jenkins_pipeline_builder/compiler_spec.rb'
     - 'spec/lib/jenkins_pipeline_builder/view_spec.rb'
-    - 'spec/lib/jenkins_pipeline_builder/pull_request_spec.rb'
+    - 'spec/lib/jenkins_pipeline_builder/pull_request_*spec.rb'
     - 'lib/jenkins_pipeline_builder/extensions/*'
 
 # Configuration parameters: CountComments.
