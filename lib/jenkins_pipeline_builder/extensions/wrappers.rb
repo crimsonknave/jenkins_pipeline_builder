@@ -26,7 +26,6 @@ wrapper do
   announced false
   jenkins_name 'Color ANSI Console Output'
   description 'This plugin adds support for ANSI escape sequences, including color, to Console Output.'
-  parameters false
   xml do |_|
     send('hudson.plugins.ansicolor.AnsiColorBuildWrapper') do
       colorMapName 'xterm'
@@ -99,6 +98,7 @@ wrapper do
         passwords = wrapper
       end
       break unless passwords
+
       passwordEntries do
         passwords.each do |password|
           EnvInjectPasswordEntry do
@@ -148,6 +148,7 @@ wrapper do
       resolvePattern
       matrixParams wrapper[:properties]
       deployBuildInfo wrapper[:'publish-build-info']
+      useSpecs false
       includeEnvVars false
       envVarsPatterns do
         includePatterns
@@ -240,6 +241,71 @@ wrapper do
       additionalOptions
       shutdownWithBuild false
       autoDisplayName false
+    end
+  end
+end
+
+wrapper do
+  name :prebuild_cleanup
+  plugin_id 'ws-cleanup'
+  description 'Deletes workspace before build starts.'
+  jenkins_name 'Delete workspace before build starts'
+  announced false
+
+  xml do |_|
+    send('hudson.plugins.ws__cleanup.PreBuildCleanup', 'plugin' => 'ws-cleanup')
+  end
+end
+
+wrapper do
+  name :build_timeout
+  plugin_id 'build-timeout'
+  description 'Abort the build if it\'s stuck'
+  jenkins_name 'Abort the build if it\'s stuck'
+  announced false
+
+  xml do |wrapper|
+    send('hudson.plugins.build__timeout.BuildTimeoutWrapper', 'plugin' => 'build-timeout@1.18') do
+      if wrapper[:timeout_strategy] == 'Absolute'
+        strategy 'class' => 'hudson.plugins.build_timeout.impl.AbsoluteTimeOutStrategy' do
+          timeoutMinutes wrapper[:timeout_minutes]
+        end
+      elsif wrapper[:timeout_strategy] == 'Deadline'
+        strategy 'class' => 'hudson.plugins.build_timeout.impl.DeadlineTimeOutStrategy' do
+          deadlineTime wrapper[:deadline_time]
+          deadlineToleranceInMinutes wrapper[:deadline_tolerance]
+        end
+      elsif wrapper[:timeout_strategy] == 'Elastic'
+        strategy 'class' => 'hudson.plugins.build_timeout.impl.ElasticTimeOutStrategy' do
+          timeoutPercentage wrapper[:timeout_percentage]
+          numberOfBuilds wrapper[:number_of_builds]
+          failSafeTimeoutDuration wrapper[:fail_safe_timeout]
+          timeoutMinutesElasticDefault wrapper[:timeout_minutes]
+        end
+      elsif wrapper[:timeout_strategy] == 'Likely stuck'
+        strategy 'class' => 'hudson.plugins.build_timeout.impl.LikelyStuckTimeOutStrategy'
+      elsif wrapper[:timeout_strategy] == 'No Activity'
+        strategy 'class' => 'hudson.plugins.build_timeout.impl.NoActivityTimeOutStrategy' do
+          timeoutSecondsString wrapper[:timeout_seconds]
+        end
+      end
+      timeoutEnvVar wrapper[:timeout_env_var] unless wrapper[:timeout_env_var].nil?
+      if wrapper[:operation] == 'Abort'
+        operationList do
+          send('hudson.plugins.build__timeout.operations.AbortOperation')
+        end
+      elsif wrapper[:operation] == 'Fail'
+        operationList do
+          send('hudson.plugins.build__timeout.operations.FailOperation')
+        end
+      elsif wrapper[:operation] == 'Writing'
+        operationList do
+          send('hudson.plugins.build__timeout.operations.WriteDescriptionOperation') do
+            description wrapper[:description]
+          end
+        end
+      else operationList
+      end
     end
   end
 end

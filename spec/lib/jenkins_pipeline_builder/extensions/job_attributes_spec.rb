@@ -1,4 +1,4 @@
-require File.expand_path('../../spec_helper', __FILE__)
+require File.expand_path('../spec_helper', __dir__)
 
 describe 'job_attributes' do
   after :each do
@@ -87,7 +87,7 @@ describe 'job_attributes' do
 
     context 'choice parameter' do
       let(:params) do
-        { parameters: [{ type: 'choice', values: [:foo, :bar], name: :foo, description: :desc, default: :default }] }
+        { parameters: [{ type: 'choice', values: %i[foo bar], name: :foo, description: :desc, default: :default }] }
       end
 
       it 'generates correct config' do
@@ -109,6 +109,20 @@ describe 'job_attributes' do
       it 'generates correct config' do
         expect(@parameters.to_s).to include 'hudson.model.StringParameterDefinition'
       end
+    end
+  end
+
+  context 'name parameter' do
+    before :each do
+      params = { shared_workspace: { name: :foo } }
+      JenkinsPipelineBuilder.registry.registry[:job][:shared_workspace].installed_version = '0'
+      JenkinsPipelineBuilder.registry.traverse_registry_path('job', params, @n_xml)
+      @parameters = @n_xml.root.children.first
+      expect(@parameters.name).to match 'org.jenkinsci.plugins.sharedworkspace.SharedWorkspace'
+    end
+
+    it 'generates correct config' do
+      expect(@parameters.to_s).to include 'name'
     end
   end
 
@@ -141,6 +155,69 @@ describe 'job_attributes' do
 
       JenkinsPipelineBuilder.registry.traverse_registry_path('job', params, @n_xml)
       expect(@n_xml.root.css('jdk').first.content).to eq 'JDK-8u45'
+    end
+  end
+
+  context 'block_when_downstream_building' do
+    it 'sets blockBuildWhenDownstreamBuilding' do
+      params = { block_when_downstream_building: 'true' }
+
+      builder = Nokogiri::XML::Builder.new do |xml|
+        xml.send('hudson.plugins.promoted__builds.PromotionProcess', 'plugin' => 'promoted-builds@2.27')
+      end
+      @n_xml = builder.doc
+
+      JenkinsPipelineBuilder.registry.traverse_registry_path('job', params, @n_xml)
+
+      expect(@n_xml.at('blockBuildWhenDownstreamBuilding')).to be_truthy
+      expect(@n_xml.at('blockBuildWhenDownstreamBuilding').content).to eq 'true'
+    end
+  end
+
+  context 'block_when_upstream_building' do
+    it 'sets blockBuildWhenUpstreamBuilding' do
+      params = { block_when_upstream_building: 'true' }
+
+      builder = Nokogiri::XML::Builder.new do |xml|
+        xml.send('hudson.plugins.promoted__builds.PromotionProcess', 'plugin' => 'promoted-builds@2.27')
+      end
+      @n_xml = builder.doc
+
+      JenkinsPipelineBuilder.registry.traverse_registry_path('job', params, @n_xml)
+
+      expect(@n_xml.at('blockBuildWhenUpstreamBuilding')).to be_truthy
+      expect(@n_xml.at('blockBuildWhenUpstreamBuilding').content).to eq 'true'
+    end
+  end
+
+  context 'is_visible' do
+    it 'sets isVisible' do
+      params = { is_visible: 'true' }
+
+      builder = Nokogiri::XML::Builder.new do |xml|
+        xml.send('hudson.plugins.promoted__builds.PromotionProcess', 'plugin' => 'promoted-builds@2.27')
+      end
+      @n_xml = builder.doc
+
+      JenkinsPipelineBuilder.registry.traverse_registry_path('job', params, @n_xml)
+
+      expect(@n_xml.at('isVisible')).to be_truthy
+    end
+  end
+
+  context 'promotion_icon' do
+    it 'sets the promotion_icon' do
+      params = { promotion_icon: 'gold-e' }
+
+      builder = Nokogiri::XML::Builder.new do |xml|
+        xml.send('hudson.plugins.promoted__builds.PromotionProcess', 'plugin' => 'promoted-builds@2.27')
+      end
+      @n_xml = builder.doc
+
+      JenkinsPipelineBuilder.registry.traverse_registry_path('job', params, @n_xml)
+
+      expect(@n_xml.at('icon')).to be_truthy
+      expect(@n_xml.at('icon').content).to eq 'star-gold-e'
     end
   end
 
@@ -249,6 +326,9 @@ describe 'job_attributes' do
         expect(
           scm_config.xpath('//scm/extensions/hudson.plugins.git.extensions.impl.WipeWorkspace').first
         ).to_not be_nil
+        expect(
+          scm_config.xpath('//scm/extensions/hudson.plugins.git.extensions.impl.PathRestriction').first
+        ).to_not be_nil
 
         expect(scm_config.css('compareRemote').first.content).to eq 'origin'
         expect(scm_config.css('compareTarget').first.content).to eq 'pr-1'
@@ -300,6 +380,20 @@ describe 'job_attributes' do
         expect(remote_config.css('name').first.content).to eq 'foo'
         expect(remote_config.css('url').first.content).to eq 'http://foo.com'
       end
+    end
+  end
+
+  context 'inject_env_vars_pre_scm' do
+    before :each do
+      JenkinsPipelineBuilder.registry.registry[:job][:inject_env_vars_pre_scm].installed_version = '1.93.1'
+    end
+
+    it 'generates correct config' do
+      env_vars =  { inject_env_vars_pre_scm: { script_content: 'echo foo' } }
+      JenkinsPipelineBuilder.registry.traverse_registry_path('job', env_vars, @n_xml)
+      properties = @n_xml.root.children.first
+      expect(properties.name).to match 'EnvInjectJobProperty'
+      expect(properties.css('scriptContent').first.content).to eq 'echo foo'
     end
   end
 end

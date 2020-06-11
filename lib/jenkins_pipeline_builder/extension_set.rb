@@ -1,16 +1,18 @@
 module JenkinsPipelineBuilder
   class ExtensionSet
-    SET_METHODS = [
-      :name,
-      :plugin_id,
-      :jenkins_name,
-      :description,
-      :announced,
-      :type
+    SET_METHODS = %i[
+      name
+      plugin_id
+      jenkins_name
+      description
+      announced
+      type
     ].freeze
+
     SET_METHODS.each do |method_name|
       define_method method_name do |value = nil|
         return settings[method_name] if value.nil?
+
         settings[method_name] = value
       end
     end
@@ -34,7 +36,6 @@ module JenkinsPipelineBuilder
     end
 
     def installed_version=(version)
-      version = version.match(/\d+\.\d+(\.\d+)?/)
       @version = Gem::Version.new version
     end
 
@@ -52,9 +53,11 @@ module JenkinsPipelineBuilder
 
     def installed_version
       return @version if @version
+
       reg = JenkinsPipelineBuilder.registry
       version = reg.versions[settings[:plugin_id]]
       raise "Plugin #{settings[:name]} is not installed (plugin_id: #{settings[:plugin_id]})" if version.nil?
+
       self.installed_version = version
       @version
     end
@@ -66,7 +69,8 @@ module JenkinsPipelineBuilder
       extension = versions[highest_allowed_version]
 
       unless extension
-        raise "Can't find version of #{name} lte #{installed_version}, available versions: #{versions.keys.map(&:to_s)}"
+        raise %(Can't find version of #{name} lte #{installed_version}.
+          Available versions: #{versions.keys.map(&:to_s)})
       end
       extension
     end
@@ -79,7 +83,7 @@ module JenkinsPipelineBuilder
         mismatch << "The values for #{method_name} do not match '#{val1}' : '#{val2}'" unless val1 == val2
       end
       mismatch.each do |error|
-        puts error
+        logger.error error
       end
       raise 'Values did not match, cannot merge extension sets' if mismatch.any?
 
@@ -101,6 +105,7 @@ module JenkinsPipelineBuilder
       end
       unless block
         raise "no block found for version #{version}" unless blocks.key version
+
         return blocks[version][:block]
       end
       store_xml version, block, path
@@ -111,7 +116,7 @@ module JenkinsPipelineBuilder
       yield block
     end
 
-    [:after, :before].each do |method_name|
+    %i[after before].each do |method_name|
       define_method method_name do |version: '0', &block|
         if @min_version
           version = @min_version
@@ -120,6 +125,7 @@ module JenkinsPipelineBuilder
         end
 
         return instance_variable_get(method_name) unless block
+
         blocks[version] = {} unless blocks[version]
         blocks[version][method_name] = block
       end
@@ -129,8 +135,8 @@ module JenkinsPipelineBuilder
       valid = errors.empty?
       unless valid
         name ||= 'A plugin with no name provided'
-        puts "Encountered errors while registering #{name}"
-        puts errors.map { |k, v| "#{k}: #{v}" }.join(', ')
+        logger.error "Encountered errors while registering #{name}"
+        logger.error errors.map { |k, v| "#{k}: #{v}" }.join(', ')
       end
       valid
     end
@@ -154,6 +160,10 @@ module JenkinsPipelineBuilder
 
     private
 
+    def logger
+      JenkinsPipelineBuilder.logger
+    end
+
     def highest_allowed_version
       ordered_version_list.each do |version|
         return version if version <= installed_version
@@ -173,7 +183,8 @@ module JenkinsPipelineBuilder
     end
 
     def deprecation_warning(name, block)
-      puts "WARNING: #{name} set the version in the #{block} block, this is deprecated. Please use a version block."
+      logger.warn %(WARNING: #{name} set the version in the #{block} block, this is deprecated.
+      Please use a version block.)
     end
   end
 end

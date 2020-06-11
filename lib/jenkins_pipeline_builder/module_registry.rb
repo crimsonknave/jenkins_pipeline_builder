@@ -19,7 +19,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 #
-
 module JenkinsPipelineBuilder
   class ModuleRegistry
     attr_accessor :registry, :registered_modules
@@ -30,6 +29,7 @@ module JenkinsPipelineBuilder
     def versions
       # Return a hash with a default of 1000 so that we'll get the newest in debug
       return Hash.new { |_| '1000.0' } if JenkinsPipelineBuilder.debug
+
       @versions ||= JenkinsPipelineBuilder.client.plugin.list_installed
     end
 
@@ -52,7 +52,9 @@ module JenkinsPipelineBuilder
         builders: '//builders',
         publishers: '//publishers',
         wrappers: '//buildWrappers',
-        triggers: '//triggers'
+        triggers: '//triggers',
+        build_steps: '//buildSteps',
+        promotion_conditions: '//conditions'
       }
     end
 
@@ -61,7 +63,6 @@ module JenkinsPipelineBuilder
       root = prefix.inject(@registry, :[])
       root[name] = {} unless root[name]
       # TODO: Set installed version here
-
       if root[name][set.name]
         root[name][set.name].merge set
       else
@@ -89,8 +90,10 @@ module JenkinsPipelineBuilder
     def traverse_registry(registry, params, n_xml, strict = false)
       params.each do |key, value|
         next unless registry.is_a? Hash
+
         unless registry.key? key
-          raise "!!!! could not find key #{key} !!!!" if strict
+          raise TypeError, "!!!! could not find key #{key} !!!!" if strict
+
           next
         end
         reg_value = registry[key]

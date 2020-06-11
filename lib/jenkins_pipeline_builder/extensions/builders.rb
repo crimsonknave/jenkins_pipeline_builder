@@ -26,36 +26,86 @@ builder do
   jenkins_name 'MultiJob Phase'
   announced false
 
-  xml do |params|
-    params[:phases].each do |name, content|
-      send('com.tikal.jenkins.plugins.multijob.MultiJobBuilder') do
-        phaseName name
-        phaseJobs do
-          content[:jobs].each do |job|
-            send('com.tikal.jenkins.plugins.multijob.PhaseJobsConfig') do
-              jobName job[:name]
-              currParams job[:current_params] || false
-              exposedSCM job[:exposed_scm] || false
-              if job[:config]
-                configs do
-                  if job[:config].key? :predefined_build_parameters
-                    send('hudson.plugins.parameterizedtrigger.PredefinedBuildParameters') do
-                      properties job[:config][:predefined_build_parameters]
+  version '0' do
+    xml do |params|
+      params[:phases].each do |name, content|
+        send('com.tikal.jenkins.plugins.multijob.MultiJobBuilder') do
+          phaseName name
+          phaseJobs do
+            content[:jobs].each do |job|
+              send('com.tikal.jenkins.plugins.multijob.PhaseJobsConfig') do
+                jobName job[:name]
+                currParams job[:current_params] || false
+                exposedSCM job[:exposed_scm] || false
+                if job[:config]
+                  configs do
+                    if job[:config].key? :predefined_build_parameters
+                      send('hudson.plugins.parameterizedtrigger.PredefinedBuildParameters') do
+                        properties job[:config][:predefined_build_parameters]
+                      end
                     end
-                  end
-                  if job[:config].key? :properties_file
-                    send('hudson.plugins.parameterizedtrigger.FileBuildParameters') do
-                      propertiesFile job[:config][:properties_file][:file]
-                      failTriggerOnMissing job[:config][:properties_file][:skip_if_missing] || 'false'
+                    if job[:config].key? :properties_file
+                      send('hudson.plugins.parameterizedtrigger.FileBuildParameters') do
+                        propertiesFile job[:config][:properties_file][:file]
+                        failTriggerOnMissing job[:config][:properties_file][:skip_if_missing] || 'false'
+                      end
                     end
                   end
                 end
+                killPhaseOnJobResultCondition job[:kill_phase_on] || 'FAILURE'
               end
-              killPhaseOnJobResultCondition job[:kill_phase_on] || 'FAILURE'
             end
           end
+          continuationCondition content[:continue_condition] || 'SUCCESSFUL'
         end
-        continuationCondition content[:continue_condition] || 'SUCCESSFUL'
+      end
+    end
+  end
+
+  version '1.27' do
+    xml do |params|
+      params[:phases].each do |name, content|
+        send('com.tikal.jenkins.plugins.multijob.MultiJobBuilder') do
+          phaseName name
+          phaseJobs do
+            content[:jobs].each do |job|
+              send('com.tikal.jenkins.plugins.multijob.PhaseJobsConfig') do
+                jobName job[:name]
+                currParams job[:current_params] || false
+                exposedSCM job[:exposed_scm] || false
+                disableJob job[:disable_job] || false
+                maxRetries job[:max_retries] || 0
+                enableRetryStrategy job[:enable_retry_strategy] || false
+                abortAllJob job[:abort_all_job] || false
+                if job[:condition]
+                  enableCondition true
+                  condition job[:condition]
+                  applyConditionOnlyIfNoSCMChanges job[:apply_condition_only_if]
+                end
+
+                if job[:config]
+                  configs do
+                    if job[:config].key? :predefined_build_parameters
+                      send('hudson.plugins.parameterizedtrigger.PredefinedBuildParameters') do
+                        properties job[:config][:predefined_build_parameters]
+                      end
+                    end
+                    if job[:config].key? :properties_file
+                      send('hudson.plugins.parameterizedtrigger.FileBuildParameters') do
+                        propertiesFile job[:config][:properties_file][:file]
+                        failTriggerOnMissing job[:config][:properties_file][:skip_if_missing] || 'false'
+                      end
+                    end
+                  end
+                end
+                killPhaseOnJobResultCondition job[:kill_phase_on] || 'FAILURE'
+                buildOnlyIfSCMChanges job[:build_only_if_scm_changes] || false
+              end
+            end
+          end
+          continuationCondition content[:continue_condition] || 'SUCCESSFUL'
+          executionType content[:execution_type] || 'PARALLEL'
+        end
       end
     end
   end
@@ -67,11 +117,11 @@ builder do
   description 'Jenkins plugin for building Maven 2/3 jobs via a special project type.'
   jenkins_name 'Invoke Maven 3'
   announced false
-  parameters [
-    :mavenName,
-    :rootPom,
-    :goals,
-    :options
+  parameters %i[
+    mavenName
+    rootPom
+    goals
+    options
   ]
 
   xml do |helper|
@@ -120,13 +170,13 @@ builder do
   description 'This plugin lets you trigger new builds when your build has completed, with various ways of specifying parameters for the new build.'
   jenkins_name 'Trigger/call builds on other projects'
   announced false
-  parameters [
-    :data,
-    :project,
-    :trigger_with_no_parameters,
-    :fail,
-    :mark_fail,
-    :mark_unstable
+  parameters %i[
+    data
+    project
+    trigger_with_no_parameters
+    fail
+    mark_fail
+    mark_unstable
   ]
 
   xml do |helper|
@@ -309,16 +359,35 @@ builder do
         raise 'Configuration invalid. At least one of \'script\' and \'file\' keys must be specified'
       end
 
-      scriptSource('class' => 'hudson.plugins.groovy.StringScriptSource') do
-        command params[:script]
-      end if params.key? :script
+      if params.key? :script
+        scriptSource('class' => 'hudson.plugins.groovy.StringScriptSource') do
+          command params[:script]
+        end
+      end
 
-      scriptSource('class' => 'hudson.plugins.groovy.FileScriptSource') do
-        scriptFile params[:file]
-      end if params.key? :file
+      if params.key? :file
+        scriptSource('class' => 'hudson.plugins.groovy.FileScriptSource') do
+          scriptFile params[:file]
+        end
+      end
 
       bindings params[:bindings]
       classpath params[:classpath]
+    end
+  end
+end
+
+builder do
+  name :nodejs_script
+  plugin_id 'nodejs'
+  description 'Lets you run nodejs scripts as a build step.'
+  jenkins_name 'Node_js script'
+  announced false
+
+  xml do |params|
+    send('jenkins.plugins.nodejs.NodeJsCommandInterpreter', 'plugin' => 'nodejs@0.2.2') do
+      command params[:script]
+      nodeJSInstallationName params[:nodeJS_installation_name]
     end
   end
 end
@@ -329,27 +398,27 @@ builder do
   description 'Jenkins plugin for checkmarx security audit'
   jenkins_name 'Trigger a checkmarx security audit of your build'
   announced false
-  parameters [
-    :serverUrl,
-    :useOwnServerCredentials,
-    :username,
-    :password,
-    :incremental,
-    :isThisBuildIncremental,
-    :projectName,
-    :groupId,
-    :skipSCMTriggers,
-    :waitForResultsEnabled,
-    :vulnerabilityThresholdEnabled,
-    :highThreshold,
-    :mediumThreshold,
-    :lowThreshold,
-    :preset,
-    :presetSpecified,
-    :generatePdfReport,
-    :excludeFolders,
-    :fullScansScheduled,
-    :filterPattern
+  parameters %i[
+    serverUrl
+    useOwnServerCredentials
+    username
+    password
+    incremental
+    isThisBuildIncremental
+    projectName
+    groupId
+    skipSCMTriggers
+    waitForResultsEnabled
+    vulnerabilityThresholdEnabled
+    highThreshold
+    mediumThreshold
+    lowThreshold
+    preset
+    presetSpecified
+    generatePdfReport
+    excludeFolders
+    fullScansScheduled
+    filterPattern
   ]
 
   xml do |params|
@@ -377,31 +446,79 @@ builder do
       filterPattern params[:filterPattern]
     end
   end
+end
 
-  builder do
-    name :sonar_standalone
-    plugin_id 'sonar'
-    description 'Quickly benefit from Sonar, the open source platform for Continuous Inspection of code quality.'
-    jenkins_name 'SonarQube Plugin'
-    announced false
-    parameters [
-      :sonarInstallation,
-      :taskToRun,
-      :jdk,
-      :pathToProjectProperties,
-      :projectProperties,
-      :jvmOptions
-    ]
+builder do
+  name :sonar_standalone
+  plugin_id 'sonar'
+  description 'The plugin allows you to trigger SonarQube analysis from Jenkins using a Post-build action to trigger the analysis with MavenQuickly benefit from Sonar, the open source platform for Continuous Inspection of code quality.'
+  jenkins_name 'SonarQube Plugin'
+  announced false
+  parameters %i[
+    sonarInstallation
+    taskToRun
+    jdk
+    pathToProjectProperties
+    projectProperties
+    jvmOptions
+  ]
 
-    xml do |params|
-      send('hudson.plugins.sonar.SonarRunnerBuilder', 'plugin' => 'sonar@2.1') do
-        installationName params[:sonarInstallation]
-        project params[:pathToProjectProperties]
-        properties params[:projectProperties]
-        javaOpts params[:jvmOptions]
-        jdk params[:jdk]
-        task params[:taskToRun]
+  xml do |params|
+    send('hudson.plugins.sonar.SonarRunnerBuilder', 'plugin' => 'sonar@2.1') do
+      installationName params[:sonarInstallation]
+      jdk params[:jdk] || '(Inherit From Job)'
+      project params[:pathToProjectProperties]
+      properties params[:projectProperties]
+      javaOpts params[:jvmOptions]
+      task params[:taskToRun]
+    end
+  end
+end
+
+builder do
+  name :conditional_multijob_step
+  plugin_id 'conditional-buildstep'
+  description 'description'
+  jenkins_name 'Conditional Build Step'
+  announced false
+
+  xml do |params|
+    send('org.jenkinsci.plugins.conditionalbuildstep.singlestep.SingleConditionalBuilder', 'plugin' => 'conditional-buildstep@1.3.3') do
+      condition('class' => 'org.jenkins_ci.plugins.run_condition.contributed.ShellCondition', 'plugin' => 'run-condition@1.0') do
+        command params[:conditional_shell]
       end
+      params[:phases].each do |name, content|
+        buildStep('class' => 'com.tikal.jenkins.plugins.multijob.MultiJobBuilder', 'plugin' => 'jenkins-multijob-plugin@1.13') do
+          phaseName name
+          phaseJobs do
+            content[:jobs].each do |job|
+              send('com.tikal.jenkins.plugins.multijob.PhaseJobsConfig') do
+                jobName job[:name]
+                currParams job[:current_params] || false
+                exposedSCM job[:exposed_scm] || false
+                if job[:config]
+                  configs do
+                    if job[:config].key? :predefined_build_parameters
+                      send('hudson.plugins.parameterizedtrigger.PredefinedBuildParameters') do
+                        properties job[:config][:predefined_build_parameters]
+                      end
+                    end
+                    if job[:config].key? :properties_file
+                      send('hudson.plugins.parameterizedtrigger.FileBuildParameters') do
+                        propertiesFile job[:config][:properties_file][:file]
+                        failTriggerOnMissing job[:config][:properties_file][:skip_if_missing] || 'false'
+                      end
+                    end
+                  end
+                end
+                killPhaseOnJobResultCondition job[:kill_phase_on] || 'FAILURE'
+              end
+            end
+          end
+          continuationCondition content[:continue_condition] || 'SUCCESSFUL'
+        end
+      end
+      runner('class' => 'org.jenkins_ci.plugins.run_condition.BuildStepRunner$Fail', 'plugin' => 'run-condition@1.0')
     end
   end
 end

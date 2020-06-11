@@ -77,9 +77,7 @@ module JenkinsPipelineBuilder
       else
         path = File.join(path, template[:name]) unless template[:name] == 'default'
         # If we are looking for the newest version or no version was set
-        if use_newest_version? template, path
-          template[:version] = highest_template_version path
-        end
+        template[:version] = highest_template_version path if use_newest_version? template, path
         path = File.join(path, template[:version]) unless template[:version].nil?
         path = File.join(path, 'pipeline')
       end
@@ -90,8 +88,8 @@ module JenkinsPipelineBuilder
     def download_yaml(url, file, remote_opts = {})
       entries[url] = file
       logger.info "Downloading #{url} to #{file}.tar"
-      open("#{file}.tar", 'w') do |local_file|
-        open(url, remote_opts) do |remote_file|
+      File.open("#{file}.tar", 'w') do |local_file|
+        URI.parse(url).open(remote_opts) do |remote_file|
           local_file.write(Zlib::GzipReader.new(remote_file).read)
         end
       end

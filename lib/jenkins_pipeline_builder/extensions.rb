@@ -36,9 +36,11 @@ module JenkinsPipelineBuilder
       xml: false,
       parameters: []
     }.freeze
-    EXT_METHODS.keys.each do |method_name|
+
+    EXT_METHODS.each_key do |method_name|
       define_method method_name do |value = nil|
         return instance_variable_get("@#{method_name}") if value.nil?
+
         instance_variable_set("@#{method_name}", value)
       end
     end
@@ -57,10 +59,14 @@ module JenkinsPipelineBuilder
 
     def execute(value, n_xml)
       errors = check_parameters value
-      errors.each do |error|
-        JenkinsPipelineBuilder.logger.error error
+      raise ArgumentError, errors.join("\n") if errors.any?
+
+      unless path
+        raise ArgumentError, %(Extension #{name} has no valid path
+        Check ModuleRegistry#entries and the definition of the extension
+        Note: job_attributes have no implicit path and must be set in the builder
+        ).squeeze(' ')
       end
-      return false if errors.any?
 
       n_builders = n_xml.xpath(path).first
       n_builders.instance_exec(value, &before) if before
@@ -72,9 +78,11 @@ module JenkinsPipelineBuilder
     def check_parameters(value)
       return [] if parameters && parameters.empty?
       return [] unless value.is_a? Hash
+
       errors = []
       value.each_key do |key|
         next if parameters && parameters.include?(key)
+
         errors << "Extension #{name} does not support parameter #{key}"
       end
       errors
@@ -82,7 +90,7 @@ module JenkinsPipelineBuilder
 
     def errors
       errors = {}
-      EXT_METHODS.keys.each do |name|
+      EXT_METHODS.each_key do |name|
         errors[name] = 'Must be set' if send(name).nil?
       end
       errors
@@ -93,7 +101,6 @@ module JenkinsPipelineBuilder
     def build_extension_xml(n_builders, value)
       Nokogiri::XML::Builder.with(n_builders) do |builder|
         include_helper value, builder
-        helper.extension = self
         builder.instance_exec helper, &xml
       end
     end
@@ -101,7 +108,7 @@ module JenkinsPipelineBuilder
     def include_helper(params, builder)
       klass = "#{name.to_s.camelize}Helper".safe_constantize
       klass ||= ExtensionHelper
-      self.helper = klass.new params, builder
+      self.helper = klass.new self, params, builder
     end
   end
 end

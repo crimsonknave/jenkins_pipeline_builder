@@ -1,10 +1,12 @@
 require 'rspec'
+require 'rspec/matchers'
 
 require 'simplecov'
 require 'simplecov-rcov'
 require 'webmock/rspec'
+require 'equivalent-xml'
 
-require File.expand_path('../../../../lib/jenkins_pipeline_builder', __FILE__)
+require File.expand_path('../../../lib/jenkins_pipeline_builder', __dir__)
 
 RSpec::Matchers.define :have_min_version do |version|
   match do |base|
@@ -34,4 +36,8 @@ RSpec::Matchers.define :have_registered_versions do |versions|
   failure_message do
     "Expected #{@set.name} to have registered versions #{versions}. Got #{@registered_versions}"
   end
+end
+
+def parse_expectation_xml(xml_string)
+  Nokogiri::XML.parse(xml_string, &:noblanks)
 end

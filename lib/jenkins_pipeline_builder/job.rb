@@ -17,14 +17,11 @@ module JenkinsPipelineBuilder
     def create_or_update
       success, payload = to_xml
       return success, payload unless success
+
       xml = payload
       return local_output(xml) if JenkinsPipelineBuilder.debug || JenkinsPipelineBuilder.file_mode
 
-      if JenkinsPipelineBuilder.client.job.exists?(name)
-        JenkinsPipelineBuilder.client.job.update(name, xml)
-      else
-        JenkinsPipelineBuilder.client.job.create(name, xml)
-      end
+      JenkinsPipelineBuilder.client.job.create_or_update(name, xml)
       [true, nil]
     end
 
@@ -35,6 +32,7 @@ module JenkinsPipelineBuilder
       job[:job_type] = 'free_style' unless job[:job_type]
       type = job[:job_type]
       return false, "Job type: #{type} is not one of #{job_methods.join(', ')}" unless known_type? type
+
       @xml = setup_freestyle_base(job)
       payload = send("update_#{type}")
 
@@ -43,7 +41,7 @@ module JenkinsPipelineBuilder
 
     private
 
-    [:free_style, :pull_request_generator].each do |method_name|
+    %i[free_style pull_request_generator].each do |method_name|
       define_method "update_#{method_name}" do
         @xml
       end
@@ -54,7 +52,7 @@ module JenkinsPipelineBuilder
     end
 
     def job_methods
-      %w(job_dsl multi_project build_flow free_style pull_request_generator)
+      %w[job_dsl multi_project build_flow free_style pull_request_generator]
     end
 
     def local_output(xml)
@@ -113,11 +111,10 @@ module JenkinsPipelineBuilder
       if params.key?(:template)
         template_name = params[:template]
         raise "Job template '#{template_name}' can't be resolved." unless @job_templates.key?(template_name)
+
         params.delete(:template)
         template = @job_templates[template_name]
-        puts "Template found: #{template}"
         params = template.deep_merge(params)
-        puts "Template merged: #{template}"
       end
 
       xml = JenkinsPipelineBuilder.client.job.build_freestyle_config(params)

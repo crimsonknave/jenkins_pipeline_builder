@@ -56,7 +56,7 @@ module JenkinsPipelineBuilder
       publish(project_name || job_collection.projects.first[:name])
     end
 
-    def pull_request(path, project_name)
+    def pull_request(path, project_name, base_branch_only = false)
       logger.info "Pull Request Generator Running from path #{path}"
       load_job_collection path unless job_collection.loaded?
       defaults = job_collection.defaults[:value]
@@ -64,7 +64,9 @@ module JenkinsPipelineBuilder
       pr_generator.delete_closed_prs
       errors = []
       pr_generator.open_prs.each do |pr|
-        pr_generator.convert! job_collection, pr
+        next if base_branch_only && defaults[:git_branch] != pr[:base]
+
+        pr_generator.convert! job_collection, pr[:number]
         error = publish(project_name)
         errors << error unless error.empty?
       end
@@ -84,16 +86,6 @@ module JenkinsPipelineBuilder
       File.open(job_name + '.xml', 'w') { |f| f.write xml }
     end
 
-    def resolve_job_by_name(name, settings = {})
-      job = job_collection.get_item(name)
-      raise "Failed to locate job by name '#{name}'" if job.nil?
-      job_value = job[:value]
-      logger.debug "Compiling job #{name}"
-      compiler = JenkinsPipelineBuilder::Compiler.new self
-      success, payload = compiler.compile_job(job_value, settings)
-      [success, payload]
-    end
-
     def resolve_project(project)
       defaults = job_collection.defaults
       settings = defaults.nil? ? {} : defaults[:value] || {}
@@ -101,11 +93,25 @@ module JenkinsPipelineBuilder
       project[:settings] = compiler.get_settings_bag(project, settings)
 
       errors = process_project project
+
       print_project_errors errors
       return false, 'Encountered errors exiting' unless errors.empty?
 
       [true, project]
     end
+
+    # Works for jobs, views, and promotions
+    def resolve_job_by_name(name, settings = {})
+      job = job_collection.get_item(name)
+      raise "Failed to locate job by name '#{name}'" if job.nil?
+
+      job_value = job[:value]
+      logger.debug "Compiling job #{name}"
+      compiler = JenkinsPipelineBuilder::Compiler.new self
+      success, payload = compiler.compile_job(job_value, settings)
+      [success, payload]
+    end
+    alias resolve_section_by_name resolve_job_by_name
 
     private
 
@@ -125,36 +131,36 @@ module JenkinsPipelineBuilder
     end
 
     def process_project(project)
+      errors = {}
       project_body = project[:value]
-      jobs = prepare_jobs(project_body[:jobs]) if project_body[:jobs]
+
+      %i[jobs views promotions].each do |key|
+        next unless project_body[key]
+
+        Utils.symbolize_with_empty_hash!(project_body[key])
+        process_job_changes!(project_body[:jobs]) if key == :jobs
+        process_pipeline_section(project_body[key], project, errors)
+      end
+
       logger.info project
-      process_job_changes(jobs)
-      errors = process_jobs(jobs, project)
-      errors = process_views(project_body[:views], project, errors) if project_body[:views]
       errors
     end
 
     def print_compile_errors(errors)
       errors.each do |k, v|
-        logger.error "Encountered errors compiling: #{k}:"
+        logger.error "Encountered errors compiling '#{k}':"
         logger.error v
       end
     end
 
     def print_project_errors(errors)
       errors.each do |error|
-        puts 'Encountered errors processing:'
-        puts error.inspect
+        logger.error 'Encountered errors processing:'
+        logger.error error.inspect
       end
     end
 
-    def prepare_jobs(jobs)
-      jobs.map! do |job|
-        job.is_a?(String) ? { job.to_sym => {} } : job
-      end
-    end
-
-    def process_job_changes(jobs)
+    def process_job_changes!(jobs)
       jobs.each do |job|
         job_id = job.keys.first
         j = job_collection.get_item(job_id)
@@ -166,55 +172,35 @@ module JenkinsPipelineBuilder
       end
     end
 
-    def process_views(views, project, errors = {})
-      views.map! do |view|
-        view.is_a?(String) ? { view.to_sym => {} } : view
-      end
-      views.each do |view|
-        view_id = view.keys.first
-        settings = project[:settings].clone.merge(view[view_id])
-        # TODO: rename resolve_job_by_name properly
-        success, payload = resolve_job_by_name(view_id, settings)
+    def process_pipeline_section(section, project, errors = {})
+      section.each do |item|
+        item_id = item.keys.first
+        settings = project[:settings].clone.merge(item[item_id])
+        success, payload = resolve_section_by_name(item_id, settings)
+
         if success
-          view[:result] = payload
+          item[:result] = payload
         else
-          errors[view_id] = payload
+          errors[item_id] = payload
         end
       end
       errors
-    end
-
-    def process_jobs(jobs, project, errors = {})
-      jobs.each do |job|
-        job_id = job.keys.first
-        settings = project[:settings].clone.merge(job[job_id])
-        success, payload = resolve_job_by_name(job_id, settings)
-        if success
-          job[:result] = payload
-        else
-          errors[job_id] = payload
-        end
-      end
-      errors
-    end
-
-    def create_views(views)
-      views.each do |v|
-        compiled_view = v[:result]
-        view.create(compiled_view)
-      end
     end
 
     def create_jobs_and_views(project)
       success, payload = resolve_project(project)
-      return { project_name: 'Failed to resolve' } unless success
+      return { project[:name].to_s => 'Failed to resolve' } unless success
 
       logger.info 'successfully resolved project'
       compiled_project = payload
 
-      errors = publish_jobs(compiled_project[:value][:jobs]) if compiled_project[:value][:jobs]
-      return errors unless compiled_project[:value][:views]
-      create_views compiled_project[:value][:views]
+      errors = publish_jobs(compiled_project[:value][:jobs])
+
+      publish_views(compiled_project[:value][:views]) if compiled_project[:value][:views]
+
+      if compiled_project[:value][:promotions]
+        publish_promotions(compiled_project[:value][:promotions], compiled_project[:value][:jobs])
+      end
       errors
     end
 
@@ -223,11 +209,37 @@ module JenkinsPipelineBuilder
       create_jobs_and_views(project || raise("Project #{project_name} not found!"))
     end
 
+    def publish_promotions(promotions, jobs)
+      # Converts a list of jobs that might have a list of promoted_builds to
+      # A hash of promoted_builds names => associated job names
+      promotion_job_pairs = jobs.each_with_object({}) do |j, acc|
+        next unless j[:result][:promoted_builds]
+
+        j[:result][:promoted_builds].each do |promotion_name|
+          acc[promotion_name] = j[:result][:name]
+        end
+      end
+
+      promotions.each do |promotion|
+        compiled_promotion = promotion[:result]
+        associated_job_name = promotion_job_pairs[compiled_promotion[:name]]
+        Promotion.new(self).create(compiled_promotion, associated_job_name)
+      end
+    end
+
+    def publish_views(views)
+      views.each do |view|
+        compiled_view = view[:result]
+        View.new(self).create(compiled_view)
+      end
+    end
+
     def publish_jobs(jobs, errors = {})
       jobs.each do |i|
         logger.info "Processing #{i}"
         job = i[:result]
         raise "Result is empty for #{i}" if job.nil?
+
         job = Job.new job
         success, payload = job.create_or_update
         errors[job.name] = payload unless success

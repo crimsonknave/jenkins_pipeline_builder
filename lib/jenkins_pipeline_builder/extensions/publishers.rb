@@ -18,7 +18,6 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
-
 publisher do
   name :description_setter
   plugin_id 'description-setter'
@@ -74,6 +73,32 @@ publisher do
 end
 
 publisher do
+  name :google_chat
+  plugin_id 'google-chat-notification'
+  description 'This plugin allows your team to setup build notifications to be sent to Google Chat rooms.'
+  jenkins_name 'Google Chat Notification'
+  announced false
+
+  version '0' do
+    xml do |params|
+      params = {} if params == true
+      send('io.cnaik.GoogleChatNotification') do
+        url params[:url] || ''
+        message params[:message] || ''
+        notifyAborted params[:notifyAborted] || false
+        notifyFailure params[:notifyFailure] || false
+        notifyNotBuilt params[:notifyNotBuilt] || false
+        notifySuccess params[:notifySuccess] || false
+        notifyUnstable params[:notifyUnstable] || false
+        notifyBackToNormal params[:notifyBackToNormal] || false
+        suppressInfoLoggers params[:suppressInfoLoggers] || false
+        sameThreadNotification params[:sameThreadNotification] || false
+      end
+    end
+  end
+end
+
+publisher do
   name :hipchat
   plugin_id 'hipchat'
   description 'This plugin allows your team to setup build notifications to be sent to HipChat rooms.'
@@ -103,6 +128,84 @@ publisher do
         notifyUnstable params[:unstable_notify] || false
         notifyFailure params[:failure_notify] || false
         notifyBackToNormal params[:normal_notify] || false
+        startJobMessage params[:start_message] || ''
+        completeJobMessage params[:complete_message] || ''
+      end
+    end
+  end
+
+  version '2.0.0' do
+    xml do |params|
+      send('jenkins.plugins.hipchat.HipChatNotifier') do
+        credentialId params[:credential_id] || ''
+        room params[:room] || ''
+        if params[:notifications]
+          send('notifications') do
+            if params[:notifications][:start_notify]
+              send('jenkins.plugins.hipchat.model.NotificationConfig') do
+                notifyEnabled params[:notifications][:start_notify][:enabled_notify] || false
+                textFormat params[:notifications][:start_notify][:text_format] || false
+                notificationType params[:notifications][:start_notify][:notification_type] || 'STARTED'
+                color params[:notifications][:start_notify][:color] || ''
+                messageTemplate params[:notifications][:start_notify][:message_template] || ''
+              end
+            end
+            if params[:notifications][:success_notify]
+              send('jenkins.plugins.hipchat.model.NotificationConfig') do
+                notifyEnabled params[:notifications][:success_notify][:enabled_notify] || false
+                textFormat params[:notifications][:success_notify][:text_format] || false
+                notificationType params[:notifications][:success_notify][:notification_type] || 'SUCCESS'
+                color params[:notifications][:success_notify][:color] || ''
+                messageTemplate params[:notifications][:success_notify][:message_template] || ''
+              end
+            end
+            if params[:notifications][:failure_notify]
+              send('jenkins.plugins.hipchat.model.NotificationConfig') do
+                notifyEnabled params[:notifications][:failure_notify][:enabled_notify] || false
+                textFormat params[:notifications][:failure_notify][:text_format] || false
+                notificationType params[:notifications][:failure_notify][:notification_type] || 'FAILURE'
+                color params[:notifications][:failure_notify][:color] || ''
+                messageTemplate params[:notifications][:failure_notify][:message_template] || ''
+              end
+            end
+            if params[:notifications][:normal_notify]
+              send('jenkins.plugins.hipchat.model.NotificationConfig') do
+                notifyEnabled params[:notifications][:normal_notify][:enabled_notify] || false
+                textFormat params[:notifications][:normal_notify][:text_format] || false
+                notificationType params[:notifications][:normal_notify][:notification_type] || 'BACK_TO_NORMAL'
+                color params[:notifications][:normal_notify][:color] || ''
+                messageTemplate params[:notifications][:normal_notify][:message_template] || ''
+              end
+            end
+            if params[:notifications][:aborted_notify]
+              send('jenkins.plugins.hipchat.model.NotificationConfig') do
+                notifyEnabled params[:notifications][:aborted_notify][:enabled_notify] || false
+                textFormat params[:notifications][:aborted_notify][:text_format] || false
+                notificationType params[:notifications][:aborted_notify][:notification_type] || 'ABORTED'
+                color params[:notifications][:aborted_notify][:color] || ''
+                messageTemplate params[:notifications][:aborted_notify][:message_template] || ''
+              end
+            end
+            if params[:notifications][:notbuilt_notify]
+              send('jenkins.plugins.hipchat.model.NotificationConfig') do
+                notifyEnabled params[:notifications][:notbuilt_notify][:notifications][:notbuilt_notify][:enabled_notify] || false
+                textFormat params[:notifications][:notbuilt_notify][:notifications][:notbuilt_notify][:text_format] || false
+                notificationType params[:notifications][:notbuilt_notify][:notification_type] || 'NOT_BUILT'
+                color params[:notifications][:notbuilt_notify][:color] || ''
+                messageTemplate params[:notifications][:notbuilt_notify][:message_template] || ''
+              end
+            end
+            if params[:notifications][:unstable_notify]
+              send('jenkins.plugins.hipchat.model.NotificationConfig') do
+                notifyEnabled params[:notifications][:unstable_notify][:enabled_notify] || false
+                textFormat params[:notifications][:unstable_notify][:text_format] || false
+                notificationType params[:notifications][:unstable_notify][:notification_type] || 'UNSTABLE'
+                color params[:notifications][:unstable_notify][:color] || ''
+                messageTemplate params[:notifications][:unstable_notify][:message_template] || ''
+              end
+            end
+          end
+        end
         startJobMessage params[:start_message] || ''
         completeJobMessage params[:complete_message] || ''
       end
@@ -152,7 +255,8 @@ publisher do
     send('hudson.tasks.junit.JUnitResultArchiver') do
       testResults params[:test_results] || ''
       keepLongStdio false
-      testDataPublishers
+      healthScaleFactor 1.0
+      allowEmptyResults params[:allow_empty_results] || false
     end
   end
 end
@@ -216,11 +320,9 @@ publisher do
       groovyScript params[:groovy_script]
       behavior params[:behavior] || '0'
       runFormMatrixParent 'false'
-      if params[:additional_classpaths]
-        params[:additional_classpaths].each do |path|
-          send('org.jvnet.hudson.plugins.groovypostbuild.GroovyScriptPath') do
-            path path[:path] || '/'
-          end
+      params[:additional_classpaths] && params[:additional_classpaths].each do |path|
+        send('org.jvnet.hudson.plugins.groovypostbuild.GroovyScriptPath') do
+          path path[:path] || '/'
         end
       end
     end
@@ -306,7 +408,6 @@ publisher do
   xml do |params|
     send('hudson.plugins.sonar.SonarPublisher') do
       jdk params[:jdk] || '(Inherit From Job)'
-      branch params[:branch] || ''
       language
       mavenOpts
       jobAdditionalProperties params[:additional_properties] || ''
@@ -465,16 +566,14 @@ publisher do
   xml do |params|
     send('htmlpublisher.HtmlPublisher', 'plugin' => 'htmlpublisher') do
       send('reportTargets') do
-        unless params[:report_targets].nil?
-          params[:report_targets].each do |target|
-            send('htmlpublisher.HtmlPublisherTarget') do
-              reportName target[:report_title] || 'HTML Report'
-              reportDir target[:report_dir] || ''
-              reportFiles target[:index_pages] || 'index.html'
-              keepAll target[:keep_past] || false
-              allowMissing target[:allow_missing] || false
-              wrapperName 'htmlpublisher-wrapper.html'
-            end
+        params[:report_targets] && params[:report_targets].each do |target|
+          send('htmlpublisher.HtmlPublisherTarget') do
+            reportName target[:report_title] || 'HTML Report'
+            reportDir target[:report_dir] || ''
+            reportFiles target[:index_pages] || 'index.html'
+            keepAll target[:keep_past] || false
+            allowMissing target[:allow_missing] || false
+            wrapperName 'htmlpublisher-wrapper.html'
           end
         end
       end
@@ -514,15 +613,13 @@ publisher do
   xml do |params|
     send('xunit', 'plugin' => 'xunit') do
       send('types') do
-        unless params[:types].nil?
-          params[:types].each do |type|
-            send(type[:type]) do
-              pattern type[:pattern]
-              skipNoTestFiles type[:skip_no_test_files] || false
-              failIfNotNew type[:fail_if_not_new] || true
-              deleteOutputFiles type[:delete_output_files] || true
-              stopProcessingIfError type[:stop_processing_error] || true
-            end
+        params[:types] && params[:types].each do |type|
+          send(type[:type]) do
+            pattern type[:pattern]
+            skipNoTestFiles type[:skip_no_test_files] || false
+            failIfNotNew type[:fail_if_not_new] || true
+            deleteOutputFiles type[:delete_output_files] || true
+            stopProcessingIfError type[:stop_processing_error] || true
           end
         end
       end
@@ -546,6 +643,79 @@ publisher do
       end
 
       thresholdMode params[:threshold_mode] || 1
+    end
+  end
+end
+
+# https://github.com/hawknewton/jenkins-github-pull-request-notifier
+publisher do
+  name :pull_request_notifier
+  plugin_id 'github-pull-request-notifier'
+  description 'Push build results to a github issue/pull request'
+  jenkins_name 'Github Pull Request Notifier'
+  announced false
+
+  xml do |params|
+    send('jenkins.plugins.github__pull__request__notifier.GithubPullRequestNotifier') do
+      pullRequestNumber params[:pull_request_number]
+      groupRepo params[:group_repo]
+      commentOnPr params[:comment_on_pr] || false
+    end
+  end
+end
+
+publisher do
+  name :cucumber_reports
+  plugin_id 'cucumber-reports'
+  description 'Provides Jenkins integration for publishing the cucumber reports'
+  jenkins_name 'Publish cucumber results as a report'
+  announced true
+
+  version '0' do
+    xml do
+      send('net.masterthought.jenkins.CucumberReportPublisher') do
+        jsonReportDirectory
+        pluginUrlPath
+        skippedFails false
+        undefinedFails false
+        noFlashCharts false
+      end
+    end
+  end
+
+  version '3.0.0' do
+    xml do |params|
+      send('net.masterthought.jenkins.CucumberReportPublisher') do
+        jsonReportDirectory
+        fileIncludePattern params[:file_include_pattern]
+        fileExcludePattern
+        trendsLimit 0
+        failedStepsNumber 0
+        skippedStepsNumber 0
+        pendingStepsNumber 0
+        undefinedStepsNumber 0
+        failedScenariosNumber 0
+        failedFeaturesNumber 0
+        parallelTesting false
+      end
+    end
+  end
+end
+
+publisher do
+  name :github_pr_coverage_status_reporter
+  plugin_id 'github-pr-coverage-status'
+  description 'Code coverage icon for GitHub pull requests'
+  jenkins_name 'GitHub Pull Request Coverage Status'
+  announced false
+
+  xml do |action|
+    if action == 'compare'
+      send('com.github.terma.jenkins.githubprcoveragestatus.CompareCoverageAction')
+    elsif action == 'master'
+      send('com.github.terma.jenkins.githubprcoveragestatus.MasterCoverageAction')
+    else
+      raise 'Invalid plugin configuration. github_pr_coverage_status_reporter value must be "compare" or "master"'
     end
   end
 end

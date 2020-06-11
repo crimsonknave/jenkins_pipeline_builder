@@ -1,4 +1,4 @@
-require File.expand_path('../spec_helper', __FILE__)
+require File.expand_path('spec_helper', __dir__)
 
 describe JenkinsPipelineBuilder::Generator do
   before :all do
@@ -89,31 +89,52 @@ describe JenkinsPipelineBuilder::Generator do
       expect(errors).to be_empty
     end
 
-    it 'produces no errors while creating pipeline TemplatePipeline' do
-      errors = bootstrap(fixture_path('template_pipeline'), 'TemplatePipeline')
-      expect(errors).to be_empty
-    end
+    context 'when creating pipeline templates' do
+      before(:each) do
+        tar_path = File.join(__dir__, 'fixtures/generator_tests/template_pipeline/jobs.tar.gz')
+        parsed_url = URI.parse('https://www.test.com')
+        file_contents = Zlib::GzipReader.new(File.open(tar_path)).read
+        file_object = double
+        allow(URI).to receive(:parse).and_return(parsed_url)
+        allow(parsed_url).to receive(:open).and_yield('A String')
+        allow(Zlib::GzipReader).to receive(:new).and_return(file_object)
+        allow(file_object).to receive(:read).and_return(file_contents)
+      end
 
-    it 'produces no errors while creating pipeline TemplatePipeline_nested' do
-      errors = bootstrap(fixture_path('template_pipeline_nested'), 'TemplatePipeline_nested')
-      expect(errors).to be_empty
-    end
+      it 'produces no errors while creating pipeline TemplatePipeline' do
+        errors = bootstrap(fixture_path('template_pipeline'), 'TemplatePipeline')
+        expect(errors).to be_empty
+      end
 
-    it 'loads extensions in remote dependencies' do
-      errors = bootstrap(fixture_path('template_pipeline'), 'TemplatePipeline')
-      expect(errors).to be_empty
-      expect(@generator.module_registry.registry[:job][:wrappers].keys).to include :test_wrapper
-      @generator.module_registry.registry[:job][:wrappers].delete(:test_wrapper)
-    end
+      it 'overrides the remote dependencies with local ones' do
+        errors = bootstrap(fixture_path('local_override/remote_and_local'), 'TemplatePipeline')
+        expect(errors).to be_empty
+        expect(@generator.job_collection.collection['{{name}}-10'][:value][:description]).to eq('Overridden stuff')
+      end
 
-    it 'overrides the remote dependencies with local ones' do
-      errors = bootstrap(fixture_path('local_override/remote_and_local'), 'TemplatePipeline')
-      expect(errors).to be_empty
-      expect(@generator.job_collection.collection['{{name}}-10'][:value][:description]).to eq('Overridden stuff')
-    end
+      it 'loads extensions in remote dependencies' do
+        errors = bootstrap(fixture_path('template_pipeline'), 'TemplatePipeline')
+        expect(errors).to be_empty
+        expect(@generator.module_registry.registry[:job][:wrappers].keys).to include :test_wrapper
+        @generator.module_registry.registry[:job][:wrappers].delete(:test_wrapper)
+      end
 
-    it 'fails to override when there are duplicate local items' do
-      expect { bootstrap(fixture_path('local_override/all_local'), 'TemplatePipeline') }.to raise_error(StandardError)
+      it 'fails to override when there are duplicate local items' do
+        expect { bootstrap(fixture_path('local_override/all_local'), 'TemplatePipeline') }.to raise_error(StandardError)
+      end
+
+      it 'produces no errors while creating pipeline TemplatePipeline_nested' do
+        tar_path = File.join(__dir__, 'fixtures/generator_tests/template_pipeline_nested/jobs.tar.gz')
+        parsed_url = URI.parse('https://www.test.com')
+        file_contents = Zlib::GzipReader.new(File.open(tar_path)).read
+        file_object = double
+        allow(URI).to receive(:parse).and_return(parsed_url)
+        allow(parsed_url).to receive(:open).and_yield('A String')
+        allow(Zlib::GzipReader).to receive(:new).and_return(file_object)
+        allow(file_object).to receive(:read).and_return(file_contents)
+        errors = bootstrap(fixture_path('template_pipeline_nested'), 'TemplatePipeline_nested')
+        expect(errors).to be_empty
+      end
     end
 
     # Things to check for:
@@ -133,7 +154,10 @@ describe JenkinsPipelineBuilder::Generator do
       JenkinsPipelineBuilder.registry.registry[:job][:scm_params].clear_installed_version
     end
 
-    let(:path) { File.expand_path('../fixtures/generator_tests/pullrequest_pipeline', __FILE__) }
+    let(:pr_master) { { number: 1, base: 'master' } }
+    let(:pr_not_master) { { number: 2, base: 'not-master' } }
+    let(:open_prs) { [pr_master, pr_not_master] }
+    let(:path) { File.expand_path('fixtures/generator_tests/pullrequest_pipeline', __dir__) }
     it 'produces no errors while creating pipeline PullRequest' do
       job_name = 'PullRequest'
       pr_generator = double('pr_generator')
@@ -145,7 +169,7 @@ describe JenkinsPipelineBuilder::Generator do
         .and_return(pr_generator)
       expect(pr_generator).to receive(:delete_closed_prs)
       expect(pr_generator).to receive(:convert!)
-      expect(pr_generator).to receive(:open_prs).and_return [1]
+      expect(pr_generator).to receive(:open_prs).and_return [pr_master]
       success = @generator.pull_request(path, job_name)
       expect(success).to be_truthy
     end
@@ -161,7 +185,7 @@ describe JenkinsPipelineBuilder::Generator do
         .and_return(pr_generator)
       expect(pr_generator).to receive(:delete_closed_prs)
       expect(pr_generator).to receive(:convert!).twice
-      expect(pr_generator).to receive(:open_prs).and_return [1, 2]
+      expect(pr_generator).to receive(:open_prs).and_return open_prs
       expect(@generator.pull_request(path, job_name)).to be_truthy
     end
 
@@ -175,12 +199,32 @@ describe JenkinsPipelineBuilder::Generator do
                              git_repo_name: 'generator_tests'))
         .and_return(pr_generator)
       expect(pr_generator).to receive(:delete_closed_prs)
-      allow(pr_generator).to receive(:convert!) do |job_collection, pr|
-        job_collection.defaults[:value][:application_name] = "testapp-PR#{pr}"
+      allow(pr_generator).to receive(:convert!) do |job_collection, pr_number|
+        job_collection.defaults[:value][:application_name] = "testapp-PR#{pr_number}"
       end
-      expect(pr_generator).to receive(:open_prs).and_return [1, 2]
+      expect(pr_generator).to receive(:open_prs).and_return open_prs
       expect(@generator.pull_request(path, job_name)).to be_truthy
       expect(@generator.job_collection.projects.first[:settings][:application_name]).to eq 'testapp-PR2'
+    end
+
+    it 'correctly creates jobs only for the base branch' do
+      job_name = 'PullRequest'
+      pr_generator = double('pr_generator')
+      expect(JenkinsPipelineBuilder::PullRequestGenerator).to receive(:new)
+        .with(hash_including(
+                application_name: 'testapp',
+                github_site: 'https://github.com',
+                git_org: 'testorg',
+                git_repo_name: 'generator_tests'
+              )).and_return(pr_generator)
+
+      expect(pr_generator).to receive(:open_prs).and_return open_prs
+      expect(pr_generator).to receive(:delete_closed_prs)
+      expect(pr_generator).to receive(:convert!)
+        .with(instance_of(JenkinsPipelineBuilder::JobCollection), pr_master[:number])
+        .once
+
+      expect(@generator.pull_request(path, job_name, true)).to be_truthy
     end
     # Things to check for
     # Fail - no PR job type found
@@ -204,28 +248,28 @@ describe JenkinsPipelineBuilder::Generator do
     end
 
     it 'loads a yaml collection from a path' do
-      path = File.expand_path('../fixtures/generator_tests/test_yaml_files', __FILE__)
+      path = File.expand_path('fixtures/generator_tests/test_yaml_files', __dir__)
       @generator.job_collection.load_from_path path
     end
     it 'loads a json collection from a path' do
-      path = File.expand_path('../fixtures/generator_tests/test_json_files', __FILE__)
+      path = File.expand_path('fixtures/generator_tests/test_json_files', __dir__)
       @generator.job_collection.load_from_path path
     end
     it 'loads both yaml and json files from a path' do
-      path = File.expand_path('../fixtures/generator_tests/test_combo_files', __FILE__)
+      path = File.expand_path('fixtures/generator_tests/test_combo_files', __dir__)
       @generator.job_collection.load_from_path path
     end
 
     it 'errors when reading a bad yaml file' do
-      path = File.expand_path('../fixtures/generator_tests/test_bad_yaml_files', __FILE__)
+      path = File.expand_path('fixtures/generator_tests/test_bad_yaml_files', __dir__)
       expect { @generator.job_collection.load_from_path path }.to raise_error(
-        RuntimeError, /There was an error while parsing a file/
+        CustomErrors::ParseError, /There was an error while parsing a file/
       )
     end
     it 'errors when reading a bad json file' do
-      path = File.expand_path('../fixtures/generator_tests/test_bad_json_files', __FILE__)
+      path = File.expand_path('fixtures/generator_tests/test_bad_json_files', __dir__)
       expect { @generator.job_collection.load_from_path path }.to raise_error(
-        RuntimeError, /There was an error while parsing a file/
+        CustomErrors::ParseError, /There was an error while parsing a file/
       )
     end
   end
@@ -235,7 +279,7 @@ describe JenkinsPipelineBuilder::Generator do
       allow(JenkinsPipelineBuilder).to receive(:debug).and_return true
       job_name = 'test_job'
       body = ''
-      test_path = File.expand_path('../fixtures/generator_tests', __FILE__)
+      test_path = File.expand_path('fixtures/generator_tests', __dir__)
       File.open("#{test_path}/#{job_name}.xml", 'r') do |f|
         f.each_line do |line|
           body << line
@@ -251,8 +295,8 @@ describe JenkinsPipelineBuilder::Generator do
 
   describe '#projects' do
     it 'returns a list of projects' do
-      path = File.expand_path('../fixtures/generator_tests/multi_project', __FILE__)
-      expect(@generator.projects(path)).to eq %w(SamplePipeline1 SamplePipeline2 SamplePipeline3)
+      path = File.expand_path('fixtures/generator_tests/multi_project', __dir__)
+      expect(@generator.projects(path)).to eq %w[SamplePipeline1 SamplePipeline2 SamplePipeline3]
     end
   end
 
@@ -269,9 +313,19 @@ describe JenkinsPipelineBuilder::Generator do
         File.delete(file_path) if File.exist?(file_path)
       end
     end
+
     it 'generates xml and saves to disk without sending jobs to the server' do
+      tar_path = File.join(__dir__, 'fixtures/generator_tests/template_pipeline_nested/jobs.tar.gz')
+      parsed_url = URI.parse('https://www.test.com')
+      file_contents = Zlib::GzipReader.new(File.open(tar_path)).read
+      file_object = double
+      allow(URI).to receive(:parse).and_return(parsed_url)
+      allow(parsed_url).to receive(:open).and_yield('A String')
+      allow(Zlib::GzipReader).to receive(:new).and_return(file_object)
+      allow(file_object).to receive(:read).and_return(file_contents)
+
       job_name = 'TemplatePipeline'
-      path = File.expand_path('../fixtures/generator_tests/template_pipeline', __FILE__)
+      path = File.expand_path('fixtures/generator_tests/template_pipeline', __dir__)
       errors = @generator.file(path, job_name)
       expect(errors).to be_empty
       expect(File.exist?("out/xml/#{job_name}-10.xml")).to be true

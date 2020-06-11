@@ -38,7 +38,7 @@ module JenkinsPipelineBuilder
         attr_accessor :jenkins_api_creds
       end
 
-      DEFAULT_FILE_FORMATS = %w(rb json yml yaml).freeze
+      DEFAULT_FILE_FORMATS = %w[rb json yml yaml].freeze
 
       # Sets up the credentials and initializes the Jenkins Pipeline Builder
       #
@@ -68,7 +68,7 @@ module JenkinsPipelineBuilder
         else
           msg = 'Credentials are not set. Please pass them as parameters or'
           msg << ' set them in the default credentials file'
-          $stderr.puts msg
+          warn msg
           exit 1
         end
       end
@@ -80,6 +80,7 @@ module JenkinsPipelineBuilder
       def self.process_creds_file(file)
         return load File.expand_path(file) if file.end_with? 'rb'
         return self.jenkins_api_creds = JSON.parse(IO.read(File.expand_path(file))) if file.end_with? 'json'
+
         self.jenkins_api_creds = YAML.load_file(File.expand_path(file))
       end
 
@@ -87,17 +88,15 @@ module JenkinsPipelineBuilder
         self.jenkins_api_creds = {}.with_indifferent_access.merge options
         if jenkins_api_creds[:server] =~ Resolv::AddressRegex
           jenkins_api_creds[:server_ip] = jenkins_api_creds.delete :server
-        elsif jenkins_api_creds[:server] =~ URI.regexp
+        elsif jenkins_api_creds[:server] =~ URI::DEFAULT_PARSER.make_regexp
           jenkins_api_creds[:server_url] = jenkins_api_creds.delete :server
         else
           msg = "server given (#{jenkins_api_creds[:server]}) is neither a URL nor an IP."
           msg << ' Please pass either a valid IP address or valid URI'
-          $stderr.puts msg
+          warn msg
           exit 1
         end
       end
-
-      private_class_method
 
       def self.find_default_file
         default_file_name = "#{ENV['HOME']}/.jenkins_api_client/login"
@@ -105,6 +104,7 @@ module JenkinsPipelineBuilder
         found_suffix = nil
         DEFAULT_FILE_FORMATS.each do |suffix|
           next unless File.exist?("#{default_file_name}.#{suffix}")
+
           if !found_suffix
             found_suffix = suffix
           else
@@ -118,6 +118,7 @@ module JenkinsPipelineBuilder
       def self.logger
         JenkinsPipelineBuilder.logger
       end
+      private_class_method :find_default_file, :logger
     end
   end
 end

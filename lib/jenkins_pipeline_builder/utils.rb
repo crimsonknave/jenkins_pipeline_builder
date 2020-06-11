@@ -30,13 +30,24 @@ end
 module JenkinsPipelineBuilder
   class Utils
     # Code was duplicated from jeknins_api_client
-    def self.symbolize_keys_deep!(h)
-      return unless h.is_a?(Hash)
-      h.keys.each do |k|
-        ks    = k.respond_to?(:to_sym) ? k.to_sym : k
-        h[ks] = h.delete k # Preserve order even when k == ks
-        symbolize_keys_deep! h[ks] if h[ks].is_a? Hash
-        h[ks].each { |item| symbolize_keys_deep!(item) } if h[ks].is_a?(Array)
+    def self.symbolize_keys_deep!(to_symbolize)
+      return unless to_symbolize.is_a?(Hash)
+
+      # This lint is disabled here because each_key requires that you not add or remove keys
+      # during iteration, which apparently this block does...
+      # rubocop:disable Style/HashEachMethods
+      to_symbolize.keys.each do |k|
+        ks = k.respond_to?(:to_sym) ? k.to_sym : k
+        to_symbolize[ks] = to_symbolize.delete k # Preserve order even when k == ks
+        symbolize_keys_deep! to_symbolize[ks] if to_symbolize[ks].is_a? Hash
+        to_symbolize[ks].each { |item| symbolize_keys_deep!(item) } if to_symbolize[ks].is_a?(Array)
+      end
+      # rubocop:enable Style/HashEachMethods
+    end
+
+    def self.symbolize_with_empty_hash!(array_of_maybe_str)
+      array_of_maybe_str.map! do |maybe_str|
+        maybe_str.is_a?(String) ? { maybe_str.to_sym => {} } : maybe_str
       end
     end
 

@@ -19,7 +19,64 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 #
+# Promotion specific job attributes
+job_attribute do
+  name :promotion_description
+  plugin_id 'builtin'
+  description 'This is the description of your promotion.'
+  jenkins_name 'Description'
+  announced false
 
+  xml path: '//hudson.plugins.promoted__builds.PromotionProcess' do |description|
+    description description.to_s
+  end
+end
+
+job_attribute do
+  name :block_when_downstream_building
+  plugin_id 'builtin'
+  description 'Prevents new builds from being executed until the downstream jobs have finished.'
+
+  xml path: '//hudson.plugins.promoted__builds.PromotionProcess' do |is_enabled|
+    blockBuildWhenDownstreamBuilding is_enabled
+  end
+end
+
+job_attribute do
+  name :block_when_upstream_building
+  plugin_id 'builtin'
+  description 'Prevents new builds from being executed until the upstream jobs have finished.'
+
+  xml path: '//hudson.plugins.promoted__builds.PromotionProcess' do |is_enabled|
+    blockBuildWhenUpstreamBuilding is_enabled
+  end
+end
+
+job_attribute do
+  name :is_visible
+  plugin_id 'builtin'
+  # TODO: Verify that this description is actually what this does
+  description 'Set a promotion process to be visible in the UI'
+
+  xml path: '//hudson.plugins.promoted__builds.PromotionProcess' do |is_enabled|
+    isVisible if is_enabled
+  end
+end
+
+job_attribute do
+  name :promotion_icon
+  plugin_id 'builtin'
+  description 'Set the star color for a promotion process'
+
+  # Should be one main color %[gold silver white blue green orange purple red]
+  # With an optional fill color "e" for empty "w" for white
+  # e.g. "gold" or "gold-w"
+  xml path: '//hudson.plugins.promoted__builds.PromotionProcess' do |icon_name|
+    icon "star-#{icon_name}"
+  end
+end
+
+# Job attributes for jobs
 job_attribute do
   name :description
   plugin_id 'builtin'
@@ -27,7 +84,7 @@ job_attribute do
   jenkins_name 'Description'
   announced false
 
-  before do
+  before do |_param|
     xpath('//project/description').remove
   end
 
@@ -73,17 +130,17 @@ job_attribute do
   announced false
 
   version '0' do
-    parameters [
-      :remote_name,
-      :refspec,
-      :local_branch,
-      :recursive_update,
-      :wipe_workspace,
-      :excluded_users,
-      :skip_tag,
-      :remote_url,
-      :excluded_regions,
-      :included_regions
+    parameters %i[
+      remote_name
+      refspec
+      local_branch
+      recursive_update
+      wipe_workspace
+      excluded_users
+      skip_tag
+      remote_url
+      excluded_regions
+      included_regions
     ]
 
     # XML preprocessing
@@ -126,19 +183,19 @@ job_attribute do
   end
 
   version '2.0' do
-    parameters [
-      :changelog_to_branch,
-      :credentials_id,
-      :excluded_regions,
-      :excluded_users,
-      :included_regions,
-      :local_branch,
-      :recursive_update,
-      :refspec,
-      :remote_name,
-      :remote_url,
-      :skip_tag,
-      :wipe_workspace
+    parameters %i[
+      changelog_to_branch
+      credentials_id
+      excluded_regions
+      excluded_users
+      included_regions
+      local_branch
+      recursive_update
+      refspec
+      remote_name
+      remote_url
+      skip_tag
+      wipe_workspace
     ]
 
     before do |params|
@@ -170,6 +227,7 @@ job_attribute do
         if params[:changelog_to_branch]
           opts = params[:changelog_to_branch]
           raise 'remote and branch are required for changelog_to_branch' unless opts[:remote] && opts[:branch]
+
           send('hudson.plugins.git.extensions.impl.ChangelogToBranch') do
             options do
               compareRemote opts[:remote]
@@ -197,12 +255,35 @@ job_attribute do
           end
         end
         if params[:included_regions] || params[:excluded_regions]
-          send('hudson.plugins.git.extensions.impl.PathRestrictions') do
+          send('hudson.plugins.git.extensions.impl.PathRestriction') do
             includedRegions params[:included_regions] if params[:included_regions]
             excludedRegions params[:excluded_regions] if params[:excluded_regions]
           end
         end
       end
+    end
+  end
+end
+
+job_attribute do
+  name :google_chat
+  plugin_id 'google-chat-notification'
+  description 'This plugin allows your team to setup build notifications to be sent to Google Chat rooms.'
+  jenkins_name 'Google Chat Notification'
+  announced false
+
+  xml path: '//properties' do |params|
+    send('io.cnaik.GoogleChatNotification', 'plugin' => 'google-chat-notification') do
+      url params[:url] || ''
+      notifyAborted params[:notifyAborted] || false
+      notifyFailure params[:notifyFailure] || false
+      notifyNotBuilt params[:notifyNotBuilt] || false
+      notifySuccess params[:notifySuccess] || false
+      notifyUnstable params[:notifyUnstable] || false
+      notifyBackToNormal params[:notifyBackToNormal] || false
+      suppressInfoLoggers params[:suppressInfoLoggers] || false
+      sameThreadNotification params[:sameThreadNotification] || false
+      message params[:message] || ''
     end
   end
 end
@@ -214,19 +295,27 @@ job_attribute do
   jenkins_name 'HipChat Notifications'
   announced false
 
-  xml path: '//properties' do |params|
-    raise 'No HipChat room specified' unless params[:room]
+  version '0' do
+    xml path: '//properties' do |params|
+      raise 'No HipChat room specified' unless params[:room]
 
-    send('jenkins.plugins.hipchat.HipChatNotifier_-HipChatJobProperty') do
-      room params[:room]
-      # :'start-notify' is legacy and evil, but I don't want anyone complaining
-      startNotification params[:start_notify] || params[:'start-notify'] || false
-      notifySuccess params[:success_notify] || true
-      notifyFailure params[:failure_notify] || true
-      notifyBackToNormal params[:normal_notify] || true
-      notifyAborted params[:aborted_notify] || true
-      notifyNotBuilt params[:notbuilt_notify] || false
-      notifyUnstable params[:unstable_notify] || true
+      send('jenkins.plugins.hipchat.HipChatNotifier_-HipChatJobProperty') do
+        room params[:room]
+        # :'start-notify' is legacy and evil, but I don't want anyone complaining
+        startNotification params[:start_notify] || params[:'start-notify'] || false
+        notifySuccess params[:success_notify] || true
+        notifyFailure params[:failure_notify] || true
+        notifyBackToNormal params[:normal_notify] || true
+        notifyAborted params[:aborted_notify] || true
+        notifyNotBuilt params[:notbuilt_notify] || false
+        notifyUnstable params[:unstable_notify] || true
+      end
+    end
+  end
+  # The xml laid  down for previous versions of the hipchat notifier require the above xml format
+  # However, version 2.0.0 specifically needs that xml to not be there.
+  version '2.0.0' do
+    xml path: '//properties' do |_params|
     end
   end
 end
@@ -343,7 +432,7 @@ job_attribute do
   announced false
 
   xml path: '//concurrentBuild' do |params|
-    (params == true) ? 'true' : 'false'
+    params == true ? 'true' : 'false'
   end
 end
 
@@ -360,6 +449,7 @@ job_attribute do
         propertiesFilePath params[:file] if params[:file]
         propertiesContent params[:content] if params[:content]
         loadFilesFromMaster false
+        scriptContent params[:script_content] if params[:script_content]
       end
       on true
       keepJenkinsSystemVariables true
@@ -367,6 +457,7 @@ job_attribute do
     end
   end
 end
+
 job_attribute do
   name :promoted_builds
   plugin_id 'promoted-builds'
@@ -378,6 +469,21 @@ job_attribute do
     send('hudson.plugins.promoted__builds.JobPropertyImpl') do
       activeProcessNames do
         params.each { |v| string v }
+      end
+    end
+  end
+end
+
+job_attribute do
+  name :shared_workspace
+  plugin_id 'shared-workspace'
+  description 'description'
+  jenkins_name 'Shared Workspace'
+
+  xml path: '//properties' do |params|
+    if params[:name]
+      send('org.jenkinsci.plugins.sharedworkspace.SharedWorkspace', 'plugin' => 'shared-workspace@1.0.2') do
+        name params[:name]
       end
     end
   end

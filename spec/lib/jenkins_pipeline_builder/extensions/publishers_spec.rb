@@ -1,4 +1,4 @@
-require File.expand_path('../../spec_helper', __FILE__)
+require File.expand_path('../spec_helper', __dir__)
 
 describe 'publishers' do
   after :each do
@@ -46,16 +46,6 @@ describe 'publishers' do
 
       additional_properties_value = sonar_nodes.select { |node| node.name == 'jobAdditionalProperties' }
       expect(additional_properties_value.first.content).to match ''
-    end
-
-    it 'populates branch' do
-      params = { publishers: { sonar_result: { branch: 'test' } } }
-
-      JenkinsPipelineBuilder.registry.traverse_registry_path('job', params, @n_xml)
-
-      sonar_nodes = @n_xml.root.children.first.children
-      branch = sonar_nodes.select { |node| node.name == 'branch' }
-      expect(branch.first.content).to match 'test'
     end
 
     it 'populates maven installation name' do
@@ -173,6 +163,73 @@ describe 'publishers' do
   end
 
   context 'hipchat' do
+    context '2.0.0' do
+      before :each do
+        allow(JenkinsPipelineBuilder.client).to receive(:plugin).and_return double(
+          list_installed: { 'hipchat' => '2.0.0' }
+        )
+      end
+      it 'generates a configuration' do
+        params = { publishers: { hipchat: {} } }
+        hipchat = JenkinsPipelineBuilder.registry.registry[:job][:publishers][:hipchat]
+        expect(hipchat.extension.min_version).to eq '2.0.0'
+        JenkinsPipelineBuilder.registry.traverse_registry_path('job', params, @n_xml)
+
+        publisher = @n_xml.root.children.first
+        expect(publisher.name).to match 'jenkins.plugins.hipchat.HipChatNotifier'
+        children = publisher.children.map(&:name)
+        expect(children).not_to include 'notifySuccess'
+        expect(children).to include 'credentialId'
+        expect(children).to include 'room'
+        expect(children).to include 'startJobMessage'
+        expect(children).to include 'completeJobMessage'
+      end
+
+      it 'instantiates notification parameters' do
+        params = { publishers: { hipchat: { notifications: {
+          start_notify: {
+            enabled_notify: true,
+            text_format: false,
+            notification_type: 'STARTED',
+            color: 'GREEN',
+            message_template: ''
+          },
+          failure_notify: {
+            enabled_notify: true,
+            text_format: true,
+            notification_type: 'FAILURE',
+            color: 'RED',
+            message_template: ''
+          }
+        } } } }
+        JenkinsPipelineBuilder.registry.traverse_registry_path('job', params, @n_xml)
+
+        publisher = @n_xml.root.children.first
+        expect(publisher.name).to match 'jenkins.plugins.hipchat.HipChatNotifier'
+
+        start_notify_config = @n_xml.root.children.children[2].children[0]
+        puts start_notify_config
+        failure_notify_config = @n_xml.root.children.children[2].children[1]
+        start_notify_children = start_notify_config.children.map(&:name)
+        start_color = start_notify_config.children[3].children.map(&:text)
+        failure_color = failure_notify_config.children[3].children.map(&:text)
+        expect(start_notify_children).to include 'notifyEnabled'
+        expect(start_notify_children).to include 'textFormat'
+        expect(start_notify_children).to include 'notificationType'
+        expect(start_notify_children).to include 'color'
+        expect(start_notify_children).to include 'messageTemplate'
+        expect(start_color).to include 'GREEN'
+
+        failure_notify_children = failure_notify_config.children.map(&:name)
+        expect(failure_notify_children).to include 'notifyEnabled'
+        expect(failure_notify_children).to include 'textFormat'
+        expect(failure_notify_children).to include 'notificationType'
+        expect(failure_notify_children).to include 'color'
+        expect(failure_color).to include 'RED'
+        expect(failure_notify_children).to include 'messageTemplate'
+      end
+    end
+
     context '0.1.9' do
       before :each do
         allow(JenkinsPipelineBuilder.client).to receive(:plugin).and_return double(
@@ -180,7 +237,22 @@ describe 'publishers' do
         )
       end
       it 'generates a configuration' do
-        params = { publishers: { hipchat: {} } }
+        params = { publishers: { hipchat: { notifications: {
+          start_notify: {
+            enabled_notify: true,
+            text_format: false,
+            notification_type: 'STARTED',
+            color: 'GREEN',
+            message_template: ''
+          },
+          failure_notify: {
+            enabled_notify: true,
+            text_format: true,
+            notification_type: 'FAILURE',
+            color: 'RED',
+            message_template: ''
+          }
+        } } } }
         hipchat = JenkinsPipelineBuilder.registry.registry[:job][:publishers][:hipchat]
         expect(hipchat.extension.min_version).to eq '0.1.9'
 
@@ -221,12 +293,155 @@ describe 'publishers' do
     end
   end
 
+  context 'pull_request_notifier' do
+    before :each do
+      allow(JenkinsPipelineBuilder.client).to receive(:plugin).and_return double(
+        list_installed: { 'github-pull-request-notifier' => '0.0.3' }
+      )
+    end
+    it 'generates a configuration' do
+      params = {
+        publishers: {
+          pull_request_notifier: {
+            pull_request_number: '5',
+            group_repo: 'test/me',
+            comment_on_pr: 'true'
+          }
+        }
+      }
+
+      JenkinsPipelineBuilder.registry.traverse_registry_path('job', params, @n_xml)
+
+      publisher = @n_xml.root.children.first
+      expect(publisher.name).to match 'jenkins.plugins.github__pull__request__notifier.GithubPullRequestNotifier'
+
+      expect(publisher.children[0].name).to eq 'pullRequestNumber'
+      expect(publisher.children[0].content).to eq '5'
+      expect(publisher.children[1].name).to eq 'groupRepo'
+      expect(publisher.children[1].content).to eq 'test/me'
+      expect(publisher.children[2].name).to eq 'commentOnPr'
+      expect(publisher.children[2].content).to eq 'true'
+    end
+    it 'it does not comment on pull requests by default' do
+      params = {
+        publishers: {
+          pull_request_notifier: {
+            pull_request_number: '5', group_repo: 'test/me'
+          }
+        }
+      }
+
+      JenkinsPipelineBuilder.registry.traverse_registry_path('job', params, @n_xml)
+
+      publisher = @n_xml.root.children.first
+
+      expect(publisher.children[2].name).to eq 'commentOnPr'
+      expect(publisher.children[2].content).to eq 'false'
+    end
+  end
+
+  context 'cucumber_reports' do
+    context '0' do
+      before :each do
+        allow(JenkinsPipelineBuilder.client).to receive(:plugin).and_return double(
+          list_installed: { 'cucumber-reports' => '0' }
+        )
+      end
+      it 'generates a configuration' do
+        params = { publishers: { cucumber_reports: {} } }
+        cucumber_reports = JenkinsPipelineBuilder.registry.registry[:job][:publishers][:cucumber_reports]
+        expect(cucumber_reports.extension.min_version).to eq '0'
+
+        JenkinsPipelineBuilder.registry.traverse_registry_path('job', params, @n_xml)
+
+        publisher = @n_xml.root.children.first
+        expect(publisher.name).to match 'net.masterthought.jenkins.CucumberReportPublisher'
+        children = publisher.children.map(&:name)
+        expect(children).to include 'jsonReportDirectory'
+        expect(children).to include 'pluginUrlPath'
+        expect(children).to include 'skippedFails'
+        expect(children).to include 'undefinedFails'
+        expect(children).to include 'noFlashCharts'
+      end
+    end
+
+    context '3.0.0' do
+      before :each do
+        allow(JenkinsPipelineBuilder.client).to receive(:plugin).and_return double(
+          list_installed: { 'cucumber-reports' => '3.0.0' }
+        )
+      end
+      it 'generates a configuration' do
+        params = { publishers: { cucumber_reports: {} } }
+        cucumber_reports = JenkinsPipelineBuilder.registry.registry[:job][:publishers][:cucumber_reports]
+        expect(cucumber_reports.extension.min_version).to eq '3.0.0'
+
+        JenkinsPipelineBuilder.registry.traverse_registry_path('job', params, @n_xml)
+
+        publisher = @n_xml.root.children.first
+        expect(publisher.name).to match 'net.masterthought.jenkins.CucumberReportPublisher'
+        children = publisher.children.map(&:name)
+        expect(children).to include 'jsonReportDirectory'
+        expect(children).to include 'fileIncludePattern'
+        expect(children).to include 'fileExcludePattern'
+        expect(children).to include 'trendsLimit'
+        expect(children).to include 'failedStepsNumber'
+        expect(children).to include 'skippedStepsNumber'
+        expect(children).to include 'pendingStepsNumber'
+        expect(children).to include 'undefinedStepsNumber'
+        expect(children).to include 'failedScenariosNumber'
+        expect(children).to include 'failedFeaturesNumber'
+        expect(children).to include 'parallelTesting'
+      end
+    end
+  end
+
   context 'git' do
     it 'generates a configuration'
   end
 
   context 'junit_result' do
-    it 'generates a configuration'
+    it 'generates a configuration' do
+      params = { publishers: { junit_result: {} } }
+
+      JenkinsPipelineBuilder.registry.traverse_registry_path('job', params, @n_xml)
+
+      publisher = @n_xml.root.children.first
+      expect(publisher.name).to match 'hudson.tasks.junit.JUnitResultArchiver'
+      children = publisher.children.map(&:name)
+
+      expect(children).to include 'testResults'
+      expect(children).to include 'keepLongStdio'
+      expect(children).to include 'healthScaleFactor'
+      expect(children).to include 'allowEmptyResults'
+    end
+  end
+
+  context 'google_chat' do
+    before :each do
+      allow(JenkinsPipelineBuilder.client).to receive(:plugin).and_return double(
+        list_installed: { 'google-chat-notification' => '0' }
+      )
+    end
+    it 'generates a configuration' do
+      params = { publishers: { google_chat: {} } }
+
+      JenkinsPipelineBuilder.registry.traverse_registry_path('job', params, @n_xml)
+
+      publisher = @n_xml.root.children.first
+      expect(publisher.name).to match 'io.cnaik.GoogleChatNotification'
+      children = publisher.children.map(&:name)
+      expect(children).to include 'url'
+      expect(children).to include 'message'
+      expect(children).to include 'notifyAborted'
+      expect(children).to include 'notifyFailure'
+      expect(children).to include 'notifyNotBuilt'
+      expect(children).to include 'notifySuccess'
+      expect(children).to include 'notifyUnstable'
+      expect(children).to include 'notifyBackToNormal'
+      expect(children).to include 'suppressInfoLoggers'
+      expect(children).to include 'sameThreadNotification'
+    end
   end
 
   context 'coverage_result' do

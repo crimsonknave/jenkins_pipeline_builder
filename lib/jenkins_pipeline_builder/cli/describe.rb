@@ -24,9 +24,8 @@ module JenkinsPipelineBuilder
   module CLI
     entries = JenkinsPipelineBuilder.registry.entries.keys
     entries << :job_attributes
-    entries.each do |entry|
+    entries.try(:each) do |entry|
       klass_name = entry.to_s.classify
-      # rubocop:disable Style/AccessModifierIndentation
       klass = Class.new(Thor) do
         extensions = if entry == :job_attributes
                        JenkinsPipelineBuilder.registry.registry[:job].select { |_, x| x.is_a? ExtensionSet }
@@ -34,7 +33,7 @@ module JenkinsPipelineBuilder
                        JenkinsPipelineBuilder.registry.registry[:job][entry]
                      end
 
-        extensions.each do |key, extset|
+        extensions.try(:each) do |key, extset|
           # TODO: don't just take the first
           ext = extset.extensions.first
           desc key, "Details for #{ext.name}"
@@ -49,13 +48,14 @@ module JenkinsPipelineBuilder
           puts "#{ext.name}: #{ext.description}"
         end
       end
-      # rubocop:enable Style/AccessModifierIndentation
       Module.const_set(klass_name, klass)
     end
+
     class Describe < Thor
       entries = JenkinsPipelineBuilder.registry.entries.keys
       entries << :job_attributes
-      entries.each do |entry, _path|
+
+      entries.try(:each) do |entry, _path|
         klass_name = entry.to_s.classify
         singular_model = entry.to_s.singularize
 
